@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BackHandler, ScrollView, View } from "react-native";
+import { BackHandler, KeyboardAvoidingView, Platform, ScrollView, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import { DMSans_400Regular } from "@expo-google-fonts/dm-sans/400Regular";
@@ -56,7 +56,7 @@ export default function App() {
       <Theme.Provider value={c}>
         <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }}>
           <StatusBar style={dark ? "light" : "dark"} />
-          <View
+          <KeyboardAvoidingView behavior={Platform.OS==='ios'?'padding':undefined} style={{flex:1}} keyboardVerticalOffset={12}><View
             style={{
               flex: 1,
               width: "100%",
@@ -64,7 +64,7 @@ export default function App() {
               alignSelf: "center",
             }}
           >
-            <ScrollView
+            <ScrollView keyboardDismissMode="on-drag"
               key={form ? "new" : tab}
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={{
@@ -166,7 +166,7 @@ export default function App() {
                 ))}
               </View>
             )}
-          </View>
+          </View></KeyboardAvoidingView>
         </SafeAreaView>
       </Theme.Provider>
     </SafeAreaProvider>

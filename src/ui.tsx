@@ -46,7 +46,7 @@ export const s = StyleSheet.create({
 });
 export function T({
   children,
-  size = 13,
+  size = 15,
   bold = false,
   color,
   title = false,
@@ -121,7 +121,7 @@ export function Button({
       onPress={onPress}
       style={({ pressed }) => [
         s.center,
-        { padding: 8, borderRadius: 12 },
+        { padding: 11, minHeight: 44, borderRadius: 12 },
         style,
         { opacity: disabled ? 0.45 : pressed ? 0.75 : 1 },
       ]}
@@ -171,7 +171,7 @@ export function Header({
   return (
     <View style={s.between}>
       <View style={s.grow}>
-        <T size={12} color={c.muted}>
+        <T size={13} color={c.muted}>
           {caption}
         </T>
         <T title size={27}>
@@ -197,7 +197,7 @@ export function Empty({ title, detail }: { title: string; detail: string }) {
     >
       <Badge name="check" size={38} />
       <T bold>{title}</T>
-      <T size={11} color={c.muted}>
+        <T size={13} color={c.muted}>
         {detail}
       </T>
     </Box>

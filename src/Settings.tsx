@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Switch, TextInput, View } from "react-native";
+import { Keyboard, ScrollView, Switch, TextInput, View } from "react-native";
 import { Header, Badge, Box, Button, T, s, useColors } from "./ui";
 import type { Route } from "./model";
 export function Settings({
@@ -21,6 +21,8 @@ export function Settings({
     [adding, add] = useState(false),
     [name, setName] = useState(""),
     [km, setKm] = useState("");
+  const [drafts, setDrafts] = useState<Record<number,string>>({});
+  function numericDraft(index:number, text:string) { if (/^\d*[.,]?\d*$/.test(text)) {setDrafts({...drafts,[index]:text});const parsed=Number(text.replace(',','.'));if(Number.isFinite(parsed)&&parsed>0){const next=[...values];next[index]=parsed;if(next[2]<=next[3])change(next)}} }
   const valid =
     name.trim() &&
     Number.isInteger(+km) &&
@@ -43,9 +45,8 @@ export function Settings({
         <Button label={"Diminuir " + labels[i]} onPress={() => step(i, -delta)}>
           <Badge name="minus" size={24} />
         </Button>
-        <T size={11}>
-          {values[i].toLocaleString("pt-BR")} {unit}
-        </T>
+        <TextInput accessibilityLabel={labels[i]} keyboardType="decimal-pad" value={drafts[i] ?? String(values[i]).replace('.',',')} onChangeText={text=>numericDraft(i,text)} onEndEditing={()=>setDrafts({...drafts,[i]:String(values[i]).replace('.',',')})} style={{minWidth:78,textAlign:'center',borderWidth:1,borderColor:c.line,borderRadius:8,padding:8,color:c.text,fontSize:15}} />
+        <T size={13}>{unit}</T>
         <Button label={"Aumentar " + labels[i]} onPress={() => step(i, delta)}>
           <Badge name="plus" size={24} />
         </Button>

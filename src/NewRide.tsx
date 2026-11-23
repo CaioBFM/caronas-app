@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { View } from "react-native";
+import { TextInput, View } from "react-native";
 import Slider from "@react-native-community/slider";
 import { Badge, Box, Button, T, s, useColors } from "./ui";
 import { Summary } from "./Summary";
@@ -25,7 +25,7 @@ export function NewRide({
     );
   const [km, distance] = useState(initial?.km ?? routes[0]?.km ?? 10),
     [selected, select] = useState(initial?.passengers ?? []),
-    [direction, setDirection] = useState(initial?.direction ?? "Ida");
+    [kmText, setKmText] = useState(String(initial?.km ?? routes[0]?.km ?? 10));
   const options = [
     ...new Set([...routes.map((r) => r.name), route, "Outro destino"]),
   ];
@@ -50,26 +50,6 @@ export function NewRide({
             Rápido e sem complicação
           </T>
         </View>
-      </View>
-      <View
-        style={[
-          s.row,
-          { backgroundColor: c.secondary, borderRadius: 13, padding: 4 },
-        ]}
-      >
-        {["Ida", "Volta"].map((d) => (
-          <Button
-            key={d}
-            selected={direction === d}
-            style={{
-              flex: 1,
-              backgroundColor: direction === d ? c.surface : c.secondary,
-            }}
-            onPress={() => setDirection(d)}
-          >
-            <T bold>{d}</T>
-          </Button>
-        ))}
       </View>
       <View style={{ gap: 10 }}>
         <T bold>Para onde?</T>
@@ -112,13 +92,14 @@ export function NewRide({
             {km} km
           </T>
         </View>
+        <TextInput accessibilityLabel="Quilometragem" keyboardType="decimal-pad" value={kmText} onChangeText={text => {setKmText(text);const n=Number(text.replace(',','.'));if(Number.isFinite(n)&&n>=1&&n<=40)distance(n)}} style={{borderWidth:1,borderColor:c.line,borderRadius:10,padding:12,color:c.text,fontSize:16}} />
         <Slider
           accessibilityLabel="Distância em quilômetros"
           minimumValue={1}
           maximumValue={40}
           step={1}
           value={km}
-          onValueChange={distance}
+          onValueChange={value => {distance(value);setKmText(String(value))}}
           minimumTrackTintColor={c.sage}
           maximumTrackTintColor={c.line}
           thumbTintColor={c.sage}
@@ -195,7 +176,7 @@ export function NewRide({
             km,
             route,
             passengers: selected,
-            direction,
+            direction: initial?.direction ?? "Ida",
           });
         }}
       >
