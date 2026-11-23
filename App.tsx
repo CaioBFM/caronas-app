@@ -117,7 +117,7 @@ export default function App() {
       setDbError("");
       showForm(false);
     } catch {
-      setDbError("Não foi possível salvar a carona.");
+      setDbError("A carona não foi salva. Confira os dados e tente novamente.");
     } finally {
       savingRide.current = false;
     }

@@ -33,6 +33,7 @@ async function database() {
           );
         });
       await migrateRides(db);
+      await repairLegacyRides(db);
       return db;
     })().catch((error) => {
       dbPromise = undefined;
@@ -65,6 +66,48 @@ async function migrateRides(db: SQLite.SQLiteDatabase) {
     `);
     await tx.runAsync(
       "INSERT INTO schema_migrations(version, applied_at) VALUES(2, ?)",
+      new Date().toISOString(),
+    );
+  });
+}
+async function repairLegacyRides(db: SQLite.SQLiteDatabase) {
+  const columns = await db.getAllAsync<{ name: string }>(
+    "PRAGMA table_info(rides)",
+  );
+  if (columns.some((column) => column.name === "pricing")) return;
+
+  // An earlier v2 schema used text IDs and did not store calculation settings.
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    await tx.execAsync(`
+      CREATE TABLE rides_repaired (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        date INTEGER NOT NULL,
+        route TEXT NOT NULL,
+        distance REAL NOT NULL CHECK(distance > 0),
+        fuel_cost_cents INTEGER NOT NULL CHECK(fuel_cost_cents >= 0),
+        fare_cents INTEGER NOT NULL CHECK(fare_cents >= 0),
+        pricing TEXT NOT NULL
+      );
+      INSERT INTO rides_repaired
+        SELECT CAST(id AS INTEGER), date, route, distance, fuel_cost_cents, fare_cents,
+          (SELECT json_object('consumption', consumption, 'gasPrice', gas_price,
+            'minFare', min_fare, 'maxFare', max_fare) FROM settings WHERE id=1)
+        FROM rides;
+      CREATE TABLE ride_passengers_repaired (
+        ride_id INTEGER NOT NULL REFERENCES rides_repaired(id) ON DELETE CASCADE,
+        person_id TEXT NOT NULL,
+        PRIMARY KEY (ride_id, person_id)
+      );
+      INSERT INTO ride_passengers_repaired
+        SELECT CAST(ride_id AS INTEGER), person_id FROM ride_passengers;
+      DROP TABLE ride_passengers;
+      DROP TABLE rides;
+      ALTER TABLE rides_repaired RENAME TO rides;
+      ALTER TABLE ride_passengers_repaired RENAME TO ride_passengers;
+      CREATE INDEX ride_passengers_person ON ride_passengers(person_id);
+    `);
+    await tx.runAsync(
+      "INSERT INTO schema_migrations(version, applied_at) VALUES(3, ?)",
       new Date().toISOString(),
     );
   });
