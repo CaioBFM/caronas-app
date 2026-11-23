@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Keyboard, ScrollView, Switch, TextInput, View } from "react-native";
+import { Switch, TextInput, View } from "react-native";
 import { Header, Badge, Box, Button, T, s, useColors } from "./ui";
 import type { Route } from "./model";
 export function Settings({
@@ -41,13 +41,13 @@ export function Settings({
   }
   function controls(i: number, unit: string, delta: number) {
     return (
-      <View style={s.row}>
-        <Button label={"Diminuir " + labels[i]} onPress={() => step(i, -delta)}>
+      <View style={{flexDirection:"row",alignItems:"center",justifyContent:"space-between",width:"100%",gap:4}}>
+        <Button style={{width:44,height:44,padding:0,flexShrink:0}} label={"Diminuir " + labels[i]} onPress={() => step(i, -delta)}>
           <Badge name="minus" size={24} />
         </Button>
-        <TextInput accessibilityLabel={labels[i]} keyboardType="decimal-pad" value={drafts[i] ?? String(values[i]).replace('.',',')} onChangeText={text=>numericDraft(i,text)} onEndEditing={()=>setDrafts({...drafts,[i]:String(values[i]).replace('.',',')})} style={{minWidth:78,textAlign:'center',borderWidth:1,borderColor:c.line,borderRadius:8,padding:8,color:c.text,fontSize:15}} />
+        <TextInput accessibilityLabel={labels[i]} keyboardType="decimal-pad" value={drafts[i] ?? String(values[i]).replace('.',',')} onChangeText={text=>numericDraft(i,text)} onEndEditing={()=>setDrafts({...drafts,[i]:String(values[i]).replace('.',',')})} style={{flex:1,minWidth:0,maxWidth:120,textAlign:'center',borderWidth:1,borderColor:c.line,borderRadius:8,padding:8,color:c.text,fontSize:15}} />
         <T size={13}>{unit}</T>
-        <Button label={"Aumentar " + labels[i]} onPress={() => step(i, delta)}>
+        <Button style={{width:44,height:44,padding:0,flexShrink:0}} label={"Aumentar " + labels[i]} onPress={() => step(i, delta)}>
           <Badge name="plus" size={24} />
         </Button>
       </View>
@@ -62,15 +62,17 @@ export function Settings({
       </T>
       <Box>
         {labels.slice(0, 2).map((label, i) => (
-          <View key={label} style={s.row}>
-            <Badge name={i ? "fuel" : "car"} />
-            <View style={s.grow}>
-              <T bold size={12}>
+          <View key={label} style={{gap:5,paddingVertical:5}}>
+            <View style={{flexDirection:'row',alignItems:'center',gap:9}}>
+              <Badge name={i ? "fuel" : "car"} />
+              <View style={{flex:1,minWidth:0}}>
+              <T bold size={11}>
                 {label}
               </T>
-              <T size={9} color={c.muted}>
+              <T size={10} color={c.muted}>
                 Usado nos cálculos
               </T>
+              </View>
             </View>
             {controls(i, i ? "R$/L" : "km/L", i ? 0.1 : 1)}
           </View>
@@ -81,8 +83,8 @@ export function Settings({
       </T>
       <Box style={{ ...s.wrap, justifyContent: "space-around" }}>
         {[2, 3].map((i) => (
-          <View key={i}>
-            <T size={11} color={c.muted}>
+          <View key={i} style={{width:'100%',gap:5}}>
+            <T size={10} color={c.muted}>
               {labels[i]}
             </T>
             {controls(i, "R$", 0.5)}
