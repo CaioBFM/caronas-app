@@ -3,39 +3,60 @@
 # dependencies
 node_modules/
 
+# local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p8
+*.p12
+*.pfx
+*.mobileprovision
+*.jks
+credentials.json
+service-account*.json
+secrets.*
+
 # Expo
 .expo/
 dist/
 web-build/
 expo-env.d.ts
+*.tsbuildinfo
 
-# Native
-.kotlin/
-*.orig.*
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
+# local databases and their SQLite sidecar files
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.sqlite3-*
+*.dump
+*.sql.gz
 
-# Metro
-.metro-health-check*
+# builds and generated native output
+build/
+coverage/
+android/
+ios/
+*.apk
+*.aab
+*.ipa
 
-# debug
+# logs and editor/OS files
 npm-debug.*
 yarn-debug.*
 yarn-error.*
-
-# macOS
+*.log
 .DS_Store
-*.pem
+.idea/
+.vscode/*
+!.vscode/extensions.json
 
-# local env files
-.env*.local
+# Native/editor temporary files
+.kotlin/
+*.orig.*
 
-# typescript
-*.tsbuildinfo
-
-# generated native folders
-/ios
-/android
+# Metro
+.metro-health-check*
