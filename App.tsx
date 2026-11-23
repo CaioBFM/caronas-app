@@ -14,6 +14,7 @@ import { Settings } from "./src/Settings";
 import { Icon, type IconName } from "./src/Icon";
 import { Button, T, Theme, light, night, s } from "./src/ui";
 import { defaultRoutes, type Tab, type Person, type Ride } from "./src/model";
+import { loadData, savePerson, deletePerson, saveRoute, deleteRoute, savePreferences } from "./src/database";
 
 const tabs: { name: Tab; icon: IconName }[] = [
   { name: "Início", icon: "home" },
@@ -35,6 +36,9 @@ export default function App() {
     [rides, setRides] = useState<Ride[]>([]);
   const [routes, setRoutes] = useState(defaultRoutes),
     [values, change] = useState([12, 6.1, 1, 3]);
+  const [ready,setReady]=useState(false),[dbError,setDbError]=useState("");
+  useEffect(()=>{let active=true;loadData().then(data=>{if(!active)return;setPeople(data.people);setRoutes(data.routes);change([data.settings.consumption,data.settings.gasPrice,data.settings.minFare,data.settings.maxFare]);setDark(data.settings.dark);setReady(true)}).catch(()=>{if(active){setDbError("Não foi possível carregar os dados locais.");setReady(true)}});return()=>{active=false}},[]);
+  async function persistPreferences(nextValues=values,nextDark=dark){try{await savePreferences({consumption:nextValues[0],gasPrice:nextValues[1],minFare:nextValues[2],maxFare:nextValues[3],dark:nextDark})}catch{setDbError("Não foi possível salvar as configurações.")}}
   const c = dark ? night : light;
   useEffect(() => {
     const listener = BackHandler.addEventListener("hardwareBackPress", () => {
@@ -50,12 +54,13 @@ export default function App() {
     });
     return () => listener.remove();
   }, [form, tab]);
-  if (!loaded && !error) return null;
+  if (!loaded && !error || !ready) return null;
   return (
     <SafeAreaProvider>
       <Theme.Provider value={c}>
         <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }}>
           <StatusBar style={dark ? "light" : "dark"} />
+          {!!dbError&&<T>{dbError}</T>}
           <KeyboardAvoidingView behavior={Platform.OS==='ios'?'padding':undefined} style={{flex:1}} keyboardVerticalOffset={12}><View
             style={{
               flex: 1,
@@ -115,22 +120,17 @@ export default function App() {
                 <People
                   people={people}
                   rides={rides}
-                  save={(p) =>
-                    setPeople((items) =>
-                      items.some((i) => i.id === p.id)
-                        ? items.map((i) => (i.id === p.id ? p : i))
-                        : [...items, p],
-                    )
-                  }
+                  save={async(p) => {try{await savePerson(p);setPeople(items=>items.some(i=>i.id===p.id)?items.map(i=>i.id===p.id?p:i):[...items,p]);setDbError("")}catch{setDbError("Não foi possível salvar a pessoa.")}}}
+                  remove={async(id)=>{try{await deletePerson(id);setPeople(items=>items.filter(p=>p.id!==id));setDbError("")}catch{setDbError("Não foi possível excluir a pessoa.")}}}
                 />
               ) : (
                 <Settings
                   dark={dark}
-                  toggle={() => setDark(!dark)}
+                  toggle={() => {const next=!dark;setDark(next);void persistPreferences(values,next)}}
                   routes={routes}
-                  setRoutes={setRoutes}
+                  setRoutes={(next)=>{const removed=routes.filter(r=>!next.some(n=>n.name===r.name));setRoutes(next);void (async()=>{try{for(const r of removed)await deleteRoute(r.name);for(const r of next)await saveRoute(r);setDbError("")}catch{setDbError("Não foi possível salvar as rotas.")}})()}}
                   values={values}
-                  change={change}
+                  change={(next)=>{change(next);void persistPreferences(next,dark)}}
                 />
               )}
             </ScrollView>

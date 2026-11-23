@@ -6,10 +6,12 @@ export function People({
   people,
   rides,
   save,
+  remove,
 }: {
   people: Person[];
   rides: Ride[];
   save: (person: Person) => void;
+  remove: (id: number) => void;
 }) {
   const c = useColors(),
     [draft, setDraft] = useState<Person | null>(null);
@@ -89,6 +91,7 @@ export function People({
             <Button label={"Editar " + p.name} onPress={() => setDraft(p)}>
               <Badge name="edit" size={30} />
             </Button>
+            <Button label={"Excluir " + p.name} onPress={() => remove(p.id)}><Badge name="trash" size={28} /></Button>
           </View>
           <View
             style={{ borderTopWidth: 1, borderColor: c.line, paddingTop: 9 }}
