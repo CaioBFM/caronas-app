@@ -1,6 +1,6 @@
 ## Projeto
 
-Aplicativo Android pessoal para organizar caronas e gastos com gasolina. O estado atual é um projeto inicial Expo SDK 58 com React Native e TypeScript; ainda não há arquitetura funcional, persistência ou roteamento dedicado.
+Aplicativo Android pessoal para organizar caronas e gastos com gasolina, desenvolvido com Expo SDK 58, React Native e TypeScript. As telas ficam em `src/`. A navegação e os dados da sessão são controlados em `App.tsx`.
 
 ## Diretrizes de implementação
 

@@ -1,6 +1,6 @@
 # Caronas
 
-Aplicativo Android pessoal, em Expo SDK 58, para acompanhar caronas e gastos com gasolina. O projeto está em preparação; funcionalidades e persistência local serão desenvolvidas em etapas futuras.
+Aplicativo Android pessoal em Expo SDK 58 para organizar caronas, rotas e passageiros. Os registros e ajustes duram uma sessão. O simulador apresenta o layout dos gastos, com os cálculos financeiros previstos para uma etapa futura.
 
 ## Requisitos
 
