@@ -1,6 +1,15 @@
 import { View } from "react-native";
 import { Badge, Box, T, s, useColors } from "./ui";
-export function Summary({ limits }: { limits: number[] }) {
+import { money, type calculateRide } from "./finance";
+export function Summary({
+  limits,
+  amounts,
+  passengerCount,
+}: {
+  limits: number[];
+  amounts: ReturnType<typeof calculateRide> | null;
+  passengerCount: number;
+}) {
   const c = useColors();
   return (
     <Box>
@@ -9,18 +18,28 @@ export function Summary({ limits }: { limits: number[] }) {
         <View>
           <T bold>Resumo da carona</T>
           <T size={10} color={c.muted}>
-            Simulação indisponível nesta versão
+            {!amounts
+              ? "Confira a distância e os ajustes"
+              : passengerCount
+                ? "Estimativa da carona"
+                : "Selecione os passageiros"}
           </T>
         </View>
       </View>
-      {["Custo da gasolina", "Por passageiro"].map((label) => (
-        <View style={s.between} key={label}>
-          <T size={12} color={c.muted}>
-            {label}
-          </T>
-          <T bold>—</T>
-        </View>
-      ))}
+      {(["Custo da gasolina", "Por passageiro"] as const).map(
+        (label, index) => (
+          <View style={s.between} key={label}>
+            <T size={12} color={c.muted}>
+              {label}
+            </T>
+            <T bold>
+              {amounts && (!index || passengerCount)
+                ? money(index ? amounts.fareCents : amounts.fuelCostCents)
+                : "—"}
+            </T>
+          </View>
+        ),
+      )}
       <View
         style={[
           s.between,
@@ -29,7 +48,7 @@ export function Summary({ limits }: { limits: number[] }) {
       >
         <T bold>Total a receber</T>
         <T title size={20} color={c.sage}>
-          —
+          {amounts && passengerCount ? money(amounts.totalCents) : "—"}
         </T>
       </View>
       <T size={10} color={c.muted}>

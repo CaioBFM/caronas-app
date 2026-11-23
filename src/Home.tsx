@@ -1,16 +1,25 @@
 import { View } from "react-native";
 import { Badge, Box, Button, Empty, Header, T, s, useColors } from "./ui";
 import { Icon } from "./Icon";
+import { money } from "./finance";
+import type { Person } from "./model";
+
 export function Home({
   count,
+  people,
+  balances,
   onNew,
   onPeople,
 }: {
   count: number;
+  people: Person[];
+  balances: ReadonlyMap<number, number>;
   onNew: () => void;
   onPeople: () => void;
 }) {
   const c = useColors();
+  const owing = people.filter((person) => (balances.get(person.id) ?? 0) > 0);
+  const total = [...balances.values()].reduce((sum, cents) => sum + cents, 0);
   return (
     <>
       <Header caption="Olá!" title="Caronas">
@@ -30,7 +39,7 @@ export function Home({
           <Badge name="wallet" size={31} background="#ffffff22" color="white" />
         </View>
         <T title size={36} color="white">
-          R$ 0,00
+          {money(total)}
         </T>
         <T size={12} color="white">
           R$ 0,00 recebido · {count} {count === 1 ? "carona" : "caronas"}
@@ -68,7 +77,22 @@ export function Home({
             </T>
           </Button>
         </View>
-        <Empty title="Tudo em dia" detail="Nenhum valor pendente por aqui." />
+        {owing.length ? (
+          <Box>
+            {owing.map((person) => (
+              <View key={person.id} style={s.between}>
+                <View style={s.grow}>
+                  <T bold>{person.name}</T>
+                </View>
+                <T bold color={c.terra}>
+                  {money(balances.get(person.id) ?? 0)}
+                </T>
+              </View>
+            ))}
+          </Box>
+        ) : (
+          <Empty title="Tudo em dia" detail="Nenhum valor pendente por aqui." />
+        )}
       </View>
       <View style={s.row}>
         <Badge name="check" size={22} />

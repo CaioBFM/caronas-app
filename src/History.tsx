@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Alert, View } from "react-native";
 import { Badge, Box, Button, Empty, Header, T, s, useColors } from "./ui";
 import type { Person, Ride } from "./model";
+import { money } from "./finance";
+
 export function History({
   rides,
   people,
@@ -67,9 +69,7 @@ export function History({
           <View style={s.row}>
             <Badge name="route" />
             <View style={s.grow}>
-              <T bold>
-                {r.route} · {r.direction}
-              </T>
+              <T bold>{r.route}</T>
               <T size={11} color={c.muted}>
                 {new Date(r.date).toLocaleDateString("pt-BR")} · {r.km} km
               </T>
@@ -80,6 +80,13 @@ export function History({
               .filter((p) => r.passengers.includes(p.id))
               .map((p) => p.name)
               .join(", ")}
+          </T>
+          <T size={12} color={c.muted}>
+            Gasolina: {money(r.fuelCostCents)} · {money(r.fareCents)} por
+            passageiro
+          </T>
+          <T bold color={c.sage}>
+            A receber: {money(r.fareCents * r.passengers.length)}
           </T>
           <View style={s.between}>
             <Button onPress={() => edit(r)}>

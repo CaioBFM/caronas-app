@@ -2,14 +2,18 @@ import { useState } from "react";
 import { TextInput, View } from "react-native";
 import { Badge, Box, Button, Empty, Header, T, s, useColors } from "./ui";
 import type { Person, Ride } from "./model";
+import { money } from "./finance";
+
 export function People({
   people,
   rides,
+  balances,
   save,
   remove,
 }: {
   people: Person[];
   rides: Ride[];
+  balances: ReadonlyMap<number, number>;
   save: (person: Person) => void;
   remove: (id: number) => void;
 }) {
@@ -91,7 +95,9 @@ export function People({
             <Button label={"Editar " + p.name} onPress={() => setDraft(p)}>
               <Badge name="edit" size={30} />
             </Button>
-            <Button label={"Excluir " + p.name} onPress={() => remove(p.id)}><Badge name="trash" size={28} /></Button>
+            <Button label={"Excluir " + p.name} onPress={() => remove(p.id)}>
+              <Badge name="trash" size={28} />
+            </Button>
           </View>
           <View
             style={{ borderTopWidth: 1, borderColor: c.line, paddingTop: 9 }}
@@ -100,7 +106,7 @@ export function People({
               Saldo atual
             </T>
             <T bold color={c.sage}>
-              Em dia
+              {balances.get(p.id) ? money(balances.get(p.id) ?? 0) : "Em dia"}
             </T>
           </View>
         </Box>
