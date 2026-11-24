@@ -2,6 +2,10 @@
 
 Aplicativo Android pessoal para registrar caronas, estimar gastos de gasolina e acompanhar os pagamentos dos passageiros. Os dados e as preferências ficam no SQLite local e são mantidos após reiniciar o aplicativo.
 
+## Download
+
+[Baixar aplicativo para Android (APK)](https://github.com/CaioBFM/caronas-app/releases/latest)
+
 ## Executar no Ubuntu
 
 Use Node.js 24 ou mais recente, npm e Expo Go compatível com o Expo SDK 58. No computador, execute:
