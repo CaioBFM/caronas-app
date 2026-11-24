@@ -37,7 +37,7 @@ import {
   exportBackup,
   restoreBackup,
   savePerson,
-  archivePerson,
+  deletePerson,
   savePayment,
   deletePayment,
   saveRoute,
@@ -341,7 +341,7 @@ export default function App() {
                   <NewRide
                     initial={editing}
                     people={people.filter(
-                      (p) => !p.archived || editing?.passengers.includes(p.id),
+                      (p) => !p.deleted || editing?.passengers.includes(p.id),
                     )}
                     routes={routes}
                     pricing={{
@@ -405,18 +405,21 @@ export default function App() {
                       );
                       setDbError("");
                     }}
-                    archive={async (id) => {
+                    remove={async (id) => {
                       try {
-                        await enqueue(() => archivePerson(id));
+                        await enqueue(() => deletePerson(id));
                         setPeople((items) =>
                           items.map((p) =>
-                            p.id === id ? { ...p, archived: true } : p,
+                            p.id === id ? { ...p, deleted: true } : p,
                           ),
+                        );
+                        selectPerson((current) =>
+                          current === id ? undefined : current,
                         );
                         setDbError("");
                       } catch {
                         setDbError(
-                          "Só é possível arquivar pessoas sem dívidas.",
+                          "Não foi possível excluir a pessoa. Confira se o saldo está em dia.",
                         );
                       }
                     }}

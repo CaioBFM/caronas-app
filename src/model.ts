@@ -1,5 +1,5 @@
 export type Tab = "Início" | "Histórico" | "Pessoas" | "Ajustes";
-export type Person = { id: number; name: string; archived?: boolean };
+export type Person = { id: number; name: string; deleted?: boolean };
 export type Route = { name: string; km: number };
 export type Ride = {
   id: number;

@@ -63,7 +63,7 @@ export function Backup({
           </T>
           <Button
             disabled={busy}
-            style={{ backgroundColor: c.soft }}
+            style={{ backgroundColor: c.sage }}
             onPress={() =>
               void run(async () => {
                 await restore(preview.content);
@@ -72,7 +72,9 @@ export function Backup({
               }, "Não foi possível restaurar o backup. Os dados atuais foram preservados.")
             }
           >
-            <T bold>Confirmar restauração</T>
+            <T bold color={c.onAccent}>
+              Confirmar restauração
+            </T>
           </Button>
           <Button
             disabled={busy}
@@ -92,7 +94,7 @@ export function Backup({
           </T>
           <Button
             disabled={busy}
-            style={{ backgroundColor: c.soft }}
+            style={{ backgroundColor: c.sage }}
             onPress={() =>
               void run(async () => {
                 if (await saveBackupFile(await exportData()))
@@ -100,7 +102,9 @@ export function Backup({
               }, "Não foi possível exportar o backup.")
             }
           >
-            <T bold>Exportar backup</T>
+            <T bold color={c.onAccent}>
+              Exportar backup
+            </T>
           </Button>
           <Button
             disabled={busy}

@@ -280,9 +280,11 @@ export function Settings({
           <Button
             disabled={savingRoute}
             onPress={onBackup}
-            style={{ backgroundColor: c.soft }}
+            style={{ backgroundColor: c.sage }}
           >
-            <T bold>Backup e restauração</T>
+            <T bold color={c.onAccent}>
+              Backup e restauração
+            </T>
           </Button>
         </Box>
       )}

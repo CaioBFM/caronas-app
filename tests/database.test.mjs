@@ -67,7 +67,8 @@ for (const legacy of [false, true]) {
         loadData,
         saveRide,
         deleteRide,
-        archivePerson,
+        deletePerson,
+        savePerson,
         savePayment,
         deletePayment,
         savePreferences,
@@ -106,7 +107,7 @@ for (const legacy of [false, true]) {
         db
           .prepare("SELECT MAX(version) AS version FROM schema_migrations")
           .get().version,
-        4,
+        5,
       );
 
       const pricing = { consumption: 10, gasPrice: 6, minFare: 1, maxFare: 3 };
@@ -138,7 +139,7 @@ for (const legacy of [false, true]) {
       );
       await assert.rejects(saveRide({ ...draft, passengers: [1, 99] }));
       await assert.rejects(saveRide({ ...draft, passengers: [1, 1] }));
-      await assert.rejects(archivePerson(1), /sem dívidas/);
+      await assert.rejects(deletePerson(1), /sem dívidas/);
       for (const invalid of [0, -1, 1.5, Infinity, 301])
         await assert.rejects(savePayment(1, invalid));
       const partial = await savePayment(1, 125);
@@ -159,18 +160,50 @@ for (const legacy of [false, true]) {
       assert.deepEqual(corrected, { ...partial, amountCents: 100 });
       await deletePayment(total.id);
       const final = await savePayment(1, 200);
-      await archivePerson(1);
-      assert.equal((await loadData()).people[0].archived, true);
+      await deletePerson(1);
+      await assert.rejects(deletePerson(1), /sem dívidas/);
+      await assert.rejects(
+        savePerson({ id: 1, name: "Nome alterado" }),
+        /excluída/,
+      );
+      await savePerson({ id: 3, name: "Pessoa sem caronas" });
+      await deletePerson(3);
+      assert.equal(
+        (await loadData()).people.find((p) => p.id === 3).deleted,
+        true,
+      );
+      assert.equal((await loadData()).people[0].deleted, true);
       assert.deepEqual(
         (await loadData()).payments.map((payment) => ({ ...payment })),
         [final, corrected],
       );
       const backup = await exportBackup();
       const original = JSON.parse(backup);
-      assert.equal(original.version, 1);
-      assert.equal(original.data.people[0].archived, true);
+      assert.equal(original.version, 2);
+      assert.equal(original.data.people[0].deleted, true);
       assert.deepEqual(original.data.payments, [final, corrected]);
 
+      const oldBackup = structuredClone(original);
+      oldBackup.version = 1;
+      oldBackup.data.people = oldBackup.data.people.map(
+        ({ deleted, ...person }) => ({
+          ...person,
+          archived: deleted,
+        }),
+      );
+      await restoreBackup(JSON.stringify(oldBackup));
+      assert.equal(await exportBackup(), backup);
+
+      db.exec(
+        "ALTER TABLE people RENAME COLUMN deleted TO archived; DELETE FROM schema_migrations WHERE version=5",
+      );
+      const migrated = await import(
+        legacy
+          ? "../src/database.ts?archived-legacy"
+          : "../src/database.ts?archived"
+      );
+      assert.equal(await migrated.exportBackup(), backup);
+      assert.deepEqual((await migrated.loadData()).rides, [ride]);
       const altered = structuredClone(original);
       altered.data.people[0].name = "Pessoa restaurada";
       altered.data.routes = [];

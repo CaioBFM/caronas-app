@@ -86,9 +86,11 @@ export function Home({
       <View style={s.wrap}>
         <Button
           onPress={onPayment}
-          style={{ backgroundColor: c.soft, flexGrow: 1 }}
+          style={{ backgroundColor: c.sage, flexGrow: 1 }}
         >
-          <T bold>Registrar pagamento</T>
+          <T bold color={c.onAccent}>
+            Registrar pagamento
+          </T>
         </Button>
         <Button
           onPress={onStatistics}

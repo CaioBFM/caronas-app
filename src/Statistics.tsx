@@ -45,9 +45,11 @@ export function Statistics({
       <Box>
         <Button
           onPress={() => setShowMonths(!showMonths)}
-          style={{ backgroundColor: c.soft }}
+          style={{ backgroundColor: c.sage }}
         >
-          <T bold>Período · {month ? label(month) : "Completo"}</T>
+          <T bold color={c.onAccent}>
+            Período · {month ? label(month) : "Completo"}
+          </T>
         </Button>
         {showMonths &&
           [undefined, ...months].map((value) => (

@@ -114,7 +114,7 @@ export function NewRide({
                 gap: 4,
                 minHeight: 66,
                 borderRadius: 14,
-                backgroundColor: name === route ? c.soft : c.surface,
+                backgroundColor: name === route ? c.sage : c.surface,
                 borderColor: name === route ? c.sage : c.line,
                 borderWidth: 1,
               }}
@@ -123,7 +123,7 @@ export function NewRide({
                 name={name === "Outro destino" ? "plus" : "route"}
                 size={28}
               />
-              <T bold size={11}>
+              <T bold size={11} color={name === route ? c.onAccent : c.text}>
                 {name}
               </T>
             </Button>
@@ -203,7 +203,7 @@ export function NewRide({
                   borderRadius: 18,
                   borderWidth: 1,
                   borderColor: active ? c.sage : c.line,
-                  backgroundColor: active ? c.soft : c.surface,
+                  backgroundColor: active ? c.sage : c.surface,
                 }}
                 onPress={() =>
                   select((ids) =>
@@ -213,10 +213,12 @@ export function NewRide({
                   )
                 }
               >
-                <T bold color={c.sage}>
+                <T bold color={active ? c.onAccent : c.sage}>
                   {active ? "✓" : p.name.charAt(0)}
                 </T>
-                <T size={12}>{p.name}</T>
+                <T size={12} color={active ? c.onAccent : c.text}>
+                  {p.name}
+                </T>
               </Button>
             );
           })}

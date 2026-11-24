@@ -9,7 +9,7 @@ export function People({
   rides,
   balances,
   save,
-  archive,
+  remove,
   person,
   select,
   payments,
@@ -21,7 +21,7 @@ export function People({
   rides: Ride[];
   balances: ReadonlyMap<number, number>;
   save: (person: Person) => Promise<void>;
-  archive: (id: number) => void;
+  remove: (id: number) => void;
   person?: Person;
   select: (id?: number) => void;
   payments: Payment[];
@@ -34,6 +34,9 @@ export function People({
   const saving = useRef(false);
   const [busy, setBusy] = useState(false);
   const [saveError, setSaveError] = useState("");
+  const [showDeleted, setShowDeleted] = useState(false);
+  const activePeople = people.filter((p) => !p.deleted);
+  const deletedPeople = people.filter((p) => p.deleted);
 
   async function submit() {
     if (saving.current || !draft?.name.trim()) return;
@@ -59,7 +62,7 @@ export function People({
       <>
         <Header
           title={person.name}
-          caption={person.archived ? "Pessoa arquivada" : "Detalhes da pessoa"}
+          caption={person.deleted ? "Pessoa excluída" : "Detalhes da pessoa"}
         >
           <Button onPress={() => select()}>
             <T bold>Voltar</T>
@@ -73,26 +76,32 @@ export function People({
           <Button
             disabled={balance <= 0}
             onPress={() => register(person.id)}
-            style={{ backgroundColor: c.soft }}
+            style={{ backgroundColor: c.sage }}
           >
-            <T bold>Registrar pagamento</T>
+            <T bold color={c.onAccent}>
+              Registrar pagamento
+            </T>
           </Button>
-          {!person.archived && (
+          {!person.deleted && (
             <Button
               disabled={balance !== 0}
               onPress={() =>
                 Alert.alert(
-                  "Arquivar pessoa?",
-                  "As caronas e os pagamentos continuarão no histórico.",
+                  "Excluir pessoa?",
+                  "Esta pessoa sairá da lista de passageiros. As caronas e os pagamentos continuarão no histórico.",
                   [
                     { text: "Cancelar", style: "cancel" },
-                    { text: "Arquivar", onPress: () => archive(person.id) },
+                    {
+                      text: "Excluir",
+                      style: "destructive",
+                      onPress: () => remove(person.id),
+                    },
                   ],
                 )
               }
             >
               <T bold color={c.terra}>
-                Arquivar pessoa
+                Excluir pessoa
               </T>
             </Button>
           )}
@@ -183,68 +192,90 @@ export function People({
       )}
       {!!saveError && <T color={c.terra}>{saveError}</T>}
       <T size={11} color={c.muted}>
-        {people.length}{" "}
-        {people.length === 1 ? "pessoa cadastrada" : "pessoas cadastradas"}
+        {activePeople.length}{" "}
+        {activePeople.length === 1
+          ? "pessoa cadastrada"
+          : "pessoas cadastradas"}
       </T>
-      {!people.length && (
+      {!activePeople.length && (
         <Empty
           title="Nenhuma pessoa cadastrada"
           detail="Toque em + para adicionar um passageiro."
         />
       )}
-      {[...people]
-        .sort((a, b) => Number(!!a.archived) - Number(!!b.archived))
-        .map((p) => (
-          <Box key={p.id}>
-            <View style={s.row}>
-              <View
-                style={[
-                  s.center,
-                  {
-                    backgroundColor: c.sage,
-                    width: 38,
-                    height: 38,
-                    borderRadius: 19,
-                  },
-                ]}
-              >
-                <T bold color={c.onAccent}>
-                  {p.name.charAt(0)}
-                </T>
-              </View>
-              <View style={s.grow}>
-                <T bold>{p.name}</T>
-                <T size={11} color={c.muted}>
-                  {rides.filter((r) => r.passengers.includes(p.id)).length}{" "}
-                  carona(s){p.archived ? " · Arquivada" : ""}
-                </T>
-              </View>
-              <Button
-                label={"Editar " + p.name}
-                disabled={busy}
-                onPress={() => setDraft(p)}
-              >
-                <Badge name="edit" size={30} />
-              </Button>
-              <Button
-                label={"Ver detalhes de " + p.name}
-                onPress={() => select(p.id)}
-              >
-                <Badge name="arrow" size={28} />
-              </Button>
-            </View>
+      {activePeople.map((p) => (
+        <Box key={p.id}>
+          <View style={s.row}>
             <View
-              style={{ borderTopWidth: 1, borderColor: c.line, paddingTop: 9 }}
+              style={[
+                s.center,
+                {
+                  backgroundColor: c.sage,
+                  width: 38,
+                  height: 38,
+                  borderRadius: 19,
+                },
+              ]}
             >
-              <T size={10} color={c.muted}>
-                Saldo atual
-              </T>
-              <T bold color={c.sage}>
-                {balances.get(p.id) ? money(balances.get(p.id) ?? 0) : "Em dia"}
+              <T bold color={c.onAccent}>
+                {p.name.charAt(0)}
               </T>
             </View>
-          </Box>
-        ))}
+            <View style={s.grow}>
+              <T bold>{p.name}</T>
+              <T size={11} color={c.muted}>
+                {rides.filter((r) => r.passengers.includes(p.id)).length}{" "}
+                carona(s)
+              </T>
+            </View>
+            <Button
+              label={"Editar " + p.name}
+              disabled={busy}
+              onPress={() => setDraft(p)}
+            >
+              <Badge name="edit" size={30} />
+            </Button>
+            <Button
+              label={"Ver detalhes de " + p.name}
+              onPress={() => select(p.id)}
+            >
+              <Badge name="arrow" size={28} />
+            </Button>
+          </View>
+          <View
+            style={{ borderTopWidth: 1, borderColor: c.line, paddingTop: 9 }}
+          >
+            <T size={10} color={c.muted}>
+              Saldo atual
+            </T>
+            <T bold color={c.sage}>
+              {balances.get(p.id) ? money(balances.get(p.id) ?? 0) : "Em dia"}
+            </T>
+          </View>
+        </Box>
+      ))}
+      {deletedPeople.length > 0 && (
+        <Box>
+          <Button
+            selected={showDeleted}
+            onPress={() => setShowDeleted((shown) => !shown)}
+          >
+            <T bold color={c.sage}>
+              {showDeleted ? "Ocultar" : "Ver"} histórico de pessoas excluídas
+            </T>
+          </Button>
+          {showDeleted &&
+            deletedPeople.map((p) => (
+              <Button
+                key={p.id}
+                onPress={() => select(p.id)}
+                style={{ backgroundColor: c.secondary }}
+              >
+                <T bold>{p.name}</T>
+              </Button>
+            ))}
+        </Box>
+      )}
     </>
   );
 }

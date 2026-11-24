@@ -17,7 +17,7 @@ Abra o Expo Go no Android e escaneie o QR code. Se a rede local impedir a conex�
 
 - **Início** permite registrar caronas e pagamentos e abrir as estatísticas.
 - **Histórico** reúne as caronas e permite corrigir ou excluir registros sem deixar pagamentos acima das cobranças.
-- **Pessoas** mostra saldos, histórico individual de pagamentos e arquivamento de pessoas em dia.
+- **Pessoas** mostra saldos, histórico individual de pagamentos e exclusão de pessoas em dia, com preservação do histórico.
 - **Estatísticas** reúne custos, distâncias, cobranças e pagamentos por mês ou por todo o período. O saldo de cada mês considera a quitação das caronas mais antigas primeiro.
 - **Ajustes** reúne os parâmetros de cálculo, as rotas, o tema e o backup.
 

@@ -48,7 +48,7 @@ export function History({
               paddingHorizontal: 13,
             }}
           >
-            <T size={11} color={filter === f ? "white" : c.muted}>
+            <T size={11} color={filter === f ? c.onAccent : c.muted}>
               {f}
             </T>
           </Button>

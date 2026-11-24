@@ -40,6 +40,7 @@ async function database() {
       await migrateRides(db);
       await repairLegacyRides(db);
       await migratePayments(db);
+      await migrateDeletedPeople(db);
       return db;
     })().catch((error) => {
       dbPromise = undefined;
@@ -148,6 +149,23 @@ async function migratePayments(db: SQLite.SQLiteDatabase) {
   });
 }
 
+async function migrateDeletedPeople(db: SQLite.SQLiteDatabase) {
+  if (
+    await db.getFirstAsync(
+      "SELECT version FROM schema_migrations WHERE version=5",
+    )
+  )
+    return;
+
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    await tx.execAsync("ALTER TABLE people RENAME COLUMN archived TO deleted");
+    await tx.runAsync(
+      "INSERT INTO schema_migrations(version, applied_at) VALUES(5, ?)",
+      new Date().toISOString(),
+    );
+  });
+}
+
 async function checkRideBalances(tx: SQLite.SQLiteDatabase) {
   if (
     await tx.getFirstAsync(
@@ -167,12 +185,12 @@ async function readData(db: SQLite.SQLiteDatabase): Promise<AppData> {
   const rows = await db.getAllAsync<{
     id: string;
     name: string;
-    archived: number;
-  }>("SELECT id, name, archived FROM people ORDER BY name COLLATE NOCASE");
+    deleted: number;
+  }>("SELECT id, name, deleted FROM people ORDER BY name COLLATE NOCASE");
   const people = rows.map((row) => ({
     id: Number(row.id),
     name: row.name,
-    archived: !!row.archived,
+    deleted: !!row.deleted,
   }));
   const routes = await db.getAllAsync<Route>(
     "SELECT name, km FROM routes ORDER BY name COLLATE NOCASE",
@@ -289,7 +307,7 @@ export async function saveRide(
     }
     for (const personId of ride.passengers) {
       const result = await tx.runAsync(
-        "INSERT INTO ride_passengers(ride_id, person_id) SELECT ?, id FROM people WHERE id=? AND (archived=0 OR ?)",
+        "INSERT INTO ride_passengers(ride_id, person_id) SELECT ?, id FROM people WHERE id=? AND (deleted=0 OR ?)",
         id,
         String(personId),
         previousPassengers.some((p) => p.person_id === String(personId))
@@ -315,20 +333,22 @@ export async function savePerson(p: Person) {
   if (!Number.isSafeInteger(p.id) || !p.name.trim())
     throw Error("Pessoa inválida");
   const db = await database();
-  await db.runAsync(
-    "INSERT INTO people(id,name) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name",
-    p.id,
+  const result = await db.runAsync(
+    "INSERT INTO people(id,name) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET name=excluded.name WHERE people.deleted=0",
+    String(p.id),
     p.name.trim(),
   );
+  if (!result.changes) throw new Error("Pessoa excluída.");
 }
-export async function archivePerson(id: number) {
+
+export async function deletePerson(id: number) {
   const db = await database();
   const result = await db.runAsync(
-    "UPDATE people SET archived=1 WHERE id=? AND id IN (SELECT id FROM person_balances WHERE balance=0)",
+    "UPDATE people SET deleted=1 WHERE id=? AND deleted=0 AND id IN (SELECT id FROM person_balances WHERE balance=0)",
     String(id),
   );
   if (!result.changes)
-    throw new Error("Só é possível arquivar pessoas sem dívidas.");
+    throw new Error("Só é possível excluir pessoas sem dívidas pendentes.");
 }
 
 export async function savePayment(
@@ -442,10 +462,10 @@ export async function restoreBackup(content: string): Promise<AppData> {
     );
     for (const p of data.people)
       await tx.runAsync(
-        "INSERT INTO people(id,name,archived) VALUES(?,?,?)",
+        "INSERT INTO people(id,name,deleted) VALUES(?,?,?)",
         String(p.id),
         p.name,
-        p.archived ? 1 : 0,
+        p.deleted ? 1 : 0,
       );
     for (const ride of data.rides) {
       await tx.runAsync(

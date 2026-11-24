@@ -84,10 +84,10 @@ export function PaymentForm({
                 setError("");
               }}
               style={{
-                backgroundColor: p.id === personId ? c.soft : c.secondary,
+                backgroundColor: p.id === personId ? c.sage : c.secondary,
               }}
             >
-              <T>
+              <T color={p.id === personId ? c.onAccent : c.text}>
                 {p.name} · {money(balances.get(p.id) ?? 0)}
               </T>
             </Button>
@@ -132,9 +132,11 @@ export function PaymentForm({
             <Button
               disabled={busy || !maximum}
               onPress={() => void submit()}
-              style={{ backgroundColor: c.soft }}
+              style={{ backgroundColor: c.sage }}
             >
-              <T bold>Confirmar</T>
+              <T bold color={c.onAccent}>
+                Confirmar
+              </T>
             </Button>
           </View>
         </Box>

@@ -1,6 +1,6 @@
 import type { AppData, Pricing } from "./model";
 
-const version = 1;
+const version = 2;
 
 export function encodeBackup(data: AppData): string {
   return JSON.stringify({ format: "caronas", version, data });
@@ -67,16 +67,17 @@ export function decodeBackup(content: string): AppData {
   }
   const file = record(parsed);
   requireValid(file.format === "caronas");
-  if (file.version !== version)
+  if (file.version !== version && file.version !== 1)
     throw new Error("Versão de backup incompatível.");
   const data = record(file.data);
   const people = list(data.people).map((value) => {
     const row = record(value);
-    requireValid(typeof row.archived === "boolean");
+    const deleted = file.version === 1 ? row.archived : row.deleted;
+    requireValid(typeof deleted === "boolean");
     return {
       id: integer(row.id, 1),
       name: text(row.name),
-      archived: row.archived,
+      deleted,
     };
   });
   unique(people.map((p) => p.id));
