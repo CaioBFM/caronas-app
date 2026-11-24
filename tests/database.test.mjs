@@ -63,10 +63,17 @@ for (const legacy of [false, true]) {
       t.mock.module("expo-sqlite", {
         namedExports: { openDatabaseAsync: async () => adapter },
       });
-      const { loadData, saveRide, deleteRide, deletePerson, savePreferences } =
-        await import(
-          legacy ? "../src/database.ts?legacy" : "../src/database.ts"
-        );
+      const {
+        loadData,
+        saveRide,
+        deleteRide,
+        archivePerson,
+        savePayment,
+        deletePayment,
+        savePreferences,
+      } = await import(
+        legacy ? "../src/database.ts?legacy" : "../src/database.ts"
+      );
       const initial = await loadData();
       assert.deepEqual(
         initial.people.map((p) => p.id),
@@ -89,7 +96,7 @@ for (const legacy of [false, true]) {
         db
           .prepare("SELECT MAX(version) AS version FROM schema_migrations")
           .get().version,
-        legacy ? 3 : 2,
+        4,
       );
 
       const pricing = { consumption: 10, gasPrice: 6, minFare: 1, maxFare: 3 };
@@ -121,7 +128,58 @@ for (const legacy of [false, true]) {
       );
       await assert.rejects(saveRide({ ...draft, passengers: [1, 99] }));
       await assert.rejects(saveRide({ ...draft, passengers: [1, 1] }));
-      await assert.rejects(deletePerson(1));
+      await assert.rejects(archivePerson(1), /sem dívidas/);
+      for (const invalid of [0, -1, 1.5, Infinity, 301])
+        await assert.rejects(savePayment(1, invalid));
+      const partial = await savePayment(1, 125);
+      const total = await savePayment(1, 175);
+      await assert.rejects(savePayment(1, 1), /saldo devedor/);
+      await assert.rejects(savePayment(1, 126, partial), /saldo devedor/);
+      await assert.rejects(deleteRide(ride.id), /mais pagamentos/);
+      await assert.rejects(
+        saveRide({ ...draft, fareCents: 299 }, ride.id),
+        /mais pagamentos/,
+      );
+      await assert.rejects(
+        saveRide({ ...draft, passengers: [2] }, ride.id),
+        /mais pagamentos/,
+      );
+
+      const corrected = await savePayment(1, 100, partial);
+      assert.deepEqual(corrected, { ...partial, amountCents: 100 });
+      await deletePayment(total.id);
+      const final = await savePayment(1, 200);
+      await archivePerson(1);
+      assert.equal((await loadData()).people[0].archived, true);
+      assert.deepEqual(
+        (await loadData()).payments.map((payment) => ({ ...payment })),
+        [final, corrected],
+      );
+      await assert.rejects(saveRide(draft), /Passageiro indisponível/);
+      const afterRestart = new DatabaseSync(file, { readOnly: true });
+      try {
+        assert.equal(
+          afterRestart
+            .prepare("SELECT SUM(amount_cents) AS total FROM payments")
+            .get().total,
+          300,
+        );
+        assert.equal(
+          afterRestart
+            .prepare("SELECT balance FROM person_balances WHERE id='1'")
+            .get().balance,
+          0,
+        );
+      } finally {
+        afterRestart.close();
+      }
+      await deletePayment(final.id);
+      assert.equal(
+        db.prepare("SELECT balance FROM person_balances WHERE id='1'").get()
+          .balance,
+        200,
+      );
+      await deletePayment(corrected.id);
       assert.deepEqual((await loadData()).rides, [ride]);
 
       const edited = await saveRide(

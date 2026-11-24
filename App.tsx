@@ -15,6 +15,8 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { Home } from "./src/Home";
 import { NewRide } from "./src/NewRide";
 import { History } from "./src/History";
+import { PaymentForm, type PaymentTarget } from "./src/PaymentForm";
+import { Statistics } from "./src/Statistics";
 import { People } from "./src/People";
 import { Settings } from "./src/Settings";
 import { Icon, type IconName } from "./src/Icon";
@@ -23,13 +25,16 @@ import {
   defaultRoutes,
   type Tab,
   type Person,
+  type Payment,
   type Ride,
   type RideDraft,
 } from "./src/model";
 import {
   loadData,
   savePerson,
-  deletePerson,
+  archivePerson,
+  savePayment,
+  deletePayment,
   saveRoute,
   deleteRoute,
   savePreferences,
@@ -56,6 +61,10 @@ export default function App() {
     [editing, edit] = useState<Ride | null>(null);
   const [dark, setDark] = useState(false),
     [people, setPeople] = useState<Person[]>([]),
+    [payments, setPayments] = useState<Payment[]>([]),
+    [paymentTarget, setPaymentTarget] = useState<PaymentTarget>(),
+    [statistics, showStatistics] = useState(false),
+    [personId, selectPerson] = useState<number>(),
     [rides, setRides] = useState<Ride[]>([]);
   const [routes, setRoutes] = useState(defaultRoutes),
     [values, change] = useState([12, 6.1, 1, 3]);
@@ -68,6 +77,7 @@ export default function App() {
         if (!active) return;
         setPeople(data.people);
         setRides(data.rides);
+        setPayments(data.payments);
         setRoutes(data.routes);
         change([
           data.settings.consumption,
@@ -103,7 +113,35 @@ export default function App() {
   }
   const c = dark ? night : light;
   const savingRide = useRef(false);
-  const balances = getBalances(rides);
+  const savingPayment = useRef(false);
+  const balances = getBalances(rides, payments);
+  const received = payments.reduce((total, p) => total + p.amountCents, 0);
+
+  async function submitPayment(id: number, cents: number, existing?: Payment) {
+    savingPayment.current = true;
+    try {
+      const payment = await savePayment(id, cents, existing);
+      setPayments((items) =>
+        existing
+          ? items.map((item) => (item.id === payment.id ? payment : item))
+          : [payment, ...items],
+      );
+      setDbError("");
+      setPaymentTarget(undefined);
+    } finally {
+      savingPayment.current = false;
+    }
+  }
+
+  async function removePayment(id: number) {
+    try {
+      await deletePayment(id);
+      setPayments((items) => items.filter((payment) => payment.id !== id));
+      setDbError("");
+    } catch {
+      setDbError("Não foi possível excluir o pagamento.");
+    }
+  }
 
   async function submitRide(draft: RideDraft) {
     savingRide.current = true;
@@ -116,8 +154,10 @@ export default function App() {
       );
       setDbError("");
       showForm(false);
-    } catch {
-      setDbError("A carona não foi salva. Confira os dados e tente novamente.");
+    } catch (failure) {
+      setDbError(
+        failure instanceof Error ? failure.message : "A carona não foi salva.",
+      );
     } finally {
       savingRide.current = false;
     }
@@ -128,12 +168,28 @@ export default function App() {
       await deleteRide(id);
       setRides((items) => items.filter((ride) => ride.id !== id));
       setDbError("");
-    } catch {
-      setDbError("Não foi possível excluir a carona.");
+    } catch (failure) {
+      setDbError(
+        failure instanceof Error
+          ? failure.message
+          : "Não foi possível excluir a carona.",
+      );
     }
   }
   useEffect(() => {
     const listener = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (paymentTarget) {
+        if (!savingPayment.current) setPaymentTarget(undefined);
+        return true;
+      }
+      if (statistics) {
+        showStatistics(false);
+        return true;
+      }
+      if (tab === "Pessoas" && personId !== undefined) {
+        selectPerson(undefined);
+        return true;
+      }
       if (form) {
         if (!savingRide.current) showForm(false);
         return true;
@@ -145,7 +201,7 @@ export default function App() {
       return false;
     });
     return () => listener.remove();
-  }, [form, tab]);
+  }, [form, tab, paymentTarget, statistics, personId]);
   if ((!loaded && !error) || !ready) return null;
   return (
     <SafeAreaProvider>
@@ -168,7 +224,15 @@ export default function App() {
             >
               <ScrollView
                 keyboardDismissMode="on-drag"
-                key={form ? "new" : tab}
+                key={
+                  paymentTarget
+                    ? "payment"
+                    : statistics
+                      ? "statistics"
+                      : form
+                        ? "new"
+                        : (personId ?? tab)
+                }
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={{
                   paddingHorizontal: 20,
@@ -177,10 +241,27 @@ export default function App() {
                   gap: 16,
                 }}
               >
-                {form ? (
+                {paymentTarget ? (
+                  <PaymentForm
+                    target={paymentTarget}
+                    people={people}
+                    balances={balances}
+                    back={() => setPaymentTarget(undefined)}
+                    save={submitPayment}
+                  />
+                ) : statistics ? (
+                  <Statistics
+                    people={people}
+                    rides={rides}
+                    payments={payments}
+                    back={() => showStatistics(false)}
+                  />
+                ) : form ? (
                   <NewRide
                     initial={editing}
-                    people={people}
+                    people={people.filter(
+                      (p) => !p.archived || editing?.passengers.includes(p.id),
+                    )}
                     routes={routes}
                     pricing={{
                       consumption: values[0],
@@ -194,9 +275,15 @@ export default function App() {
                 ) : tab === "Início" ? (
                   <Home
                     count={rides.length}
+                    received={received}
+                    onPayment={() => setPaymentTarget({})}
+                    onStatistics={() => showStatistics(true)}
                     people={people}
                     balances={balances}
-                    onPeople={() => setTab("Pessoas")}
+                    onPeople={() => {
+                      selectPerson(undefined);
+                      setTab("Pessoas");
+                    }}
                     onNew={() => {
                       edit(null);
                       showForm(true);
@@ -214,6 +301,17 @@ export default function App() {
                   />
                 ) : tab === "Pessoas" ? (
                   <People
+                    person={people.find((p) => p.id === personId)}
+                    select={selectPerson}
+                    payments={payments}
+                    register={(id) => setPaymentTarget({ personId: id })}
+                    editPayment={(existing) =>
+                      setPaymentTarget({
+                        personId: existing.personId,
+                        existing,
+                      })
+                    }
+                    removePayment={removePayment}
                     people={people}
                     rides={rides}
                     balances={balances}
@@ -230,17 +328,19 @@ export default function App() {
                         setDbError("Não foi possível salvar a pessoa.");
                       }
                     }}
-                    remove={async (id) => {
-                      if (balances.has(id)) {
-                        setDbError("Esta pessoa está vinculada a uma carona.");
-                        return;
-                      }
+                    archive={async (id) => {
                       try {
-                        await deletePerson(id);
-                        setPeople((items) => items.filter((p) => p.id !== id));
+                        await archivePerson(id);
+                        setPeople((items) =>
+                          items.map((p) =>
+                            p.id === id ? { ...p, archived: true } : p,
+                          ),
+                        );
                         setDbError("");
                       } catch {
-                        setDbError("Não foi possível excluir a pessoa.");
+                        setDbError(
+                          "Só é possível arquivar pessoas sem dívidas.",
+                        );
                       }
                     }}
                   />
@@ -276,7 +376,7 @@ export default function App() {
                   />
                 )}
               </ScrollView>
-              {!form && (
+              {!form && !paymentTarget && !statistics && (
                 <View
                   style={[
                     s.row,
@@ -294,7 +394,10 @@ export default function App() {
                       key={t.name}
                       selected={tab === t.name}
                       style={{ flex: 1, gap: 3 }}
-                      onPress={() => setTab(t.name)}
+                      onPress={() => {
+                        selectPerson(undefined);
+                        setTab(t.name);
+                      }}
                     >
                       <Icon
                         name={t.icon}

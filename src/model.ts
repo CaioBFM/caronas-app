@@ -1,5 +1,5 @@
 export type Tab = "Início" | "Histórico" | "Pessoas" | "Ajustes";
-export type Person = { id: number; name: string };
+export type Person = { id: number; name: string; archived?: boolean };
 export type Route = { name: string; km: number };
 export type Ride = {
   id: number;
@@ -23,3 +23,10 @@ export type Pricing = {
   maxFare: number;
 };
 export type RideDraft = Omit<Ride, "id">;
+
+export type Payment = {
+  id: number;
+  personId: number;
+  date: number;
+  amountCents: number;
+};

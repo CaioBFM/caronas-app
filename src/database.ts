@@ -1,5 +1,5 @@
 import * as SQLite from "expo-sqlite";
-import type { Person, Route, Ride, RideDraft, Pricing } from "./model";
+import type { Person, Route, Ride, RideDraft, Pricing, Payment } from "./model";
 
 export type Preferences = {
   consumption: number;
@@ -34,6 +34,7 @@ async function database() {
         });
       await migrateRides(db);
       await repairLegacyRides(db);
+      await migratePayments(db);
       return db;
     })().catch((error) => {
       dbPromise = undefined;
@@ -112,12 +113,59 @@ async function repairLegacyRides(db: SQLite.SQLiteDatabase) {
     );
   });
 }
+async function migratePayments(db: SQLite.SQLiteDatabase) {
+  const migration = await db.getFirstAsync(
+    "SELECT version FROM schema_migrations WHERE version=4",
+  );
+  if (migration) return;
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    await tx.execAsync(`
+      ALTER TABLE people ADD COLUMN archived INTEGER NOT NULL DEFAULT 0 CHECK(archived IN (0,1));
+      CREATE TABLE payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        person_id TEXT NOT NULL REFERENCES people(id) ON DELETE RESTRICT,
+        date INTEGER NOT NULL,
+        amount_cents INTEGER NOT NULL CHECK(typeof(amount_cents) = 'integer' AND amount_cents > 0)
+      );
+      CREATE INDEX payments_person ON payments(person_id);
+      CREATE VIEW person_balances AS
+        SELECT p.id,
+          COALESCE((SELECT SUM(r.fare_cents) FROM ride_passengers rp
+            JOIN rides r ON r.id=rp.ride_id WHERE rp.person_id=p.id), 0) -
+          COALESCE((SELECT SUM(amount_cents) FROM payments WHERE person_id=p.id), 0)
+          AS balance
+        FROM people p;
+    `);
+    await tx.runAsync(
+      "INSERT INTO schema_migrations(version, applied_at) VALUES(4, ?)",
+      new Date().toISOString(),
+    );
+  });
+}
+
+async function checkRideBalances(tx: SQLite.SQLiteDatabase) {
+  if (
+    await tx.getFirstAsync(
+      "SELECT id FROM person_balances WHERE balance < 0 LIMIT 1",
+    )
+  )
+    throw new Error(
+      "A alteração deixaria uma pessoa com mais pagamentos do que cobranças.",
+    );
+}
+
 export async function loadData() {
   const db = await database();
-  const rows = await db.getAllAsync<{ id: string; name: string }>(
-    "SELECT id, name FROM people ORDER BY name COLLATE NOCASE",
-  );
-  const people = rows.map((row) => ({ id: Number(row.id), name: row.name }));
+  const rows = await db.getAllAsync<{
+    id: string;
+    name: string;
+    archived: number;
+  }>("SELECT id, name, archived FROM people ORDER BY name COLLATE NOCASE");
+  const people = rows.map((row) => ({
+    id: Number(row.id),
+    name: row.name,
+    archived: !!row.archived,
+  }));
   let routes = await db.getAllAsync<Route>(
     "SELECT name, km FROM routes ORDER BY name COLLATE NOCASE",
   );
@@ -146,10 +194,15 @@ export async function loadData() {
     "SELECT consumption,gas_price as gasPrice,min_fare as minFare,max_fare as maxFare,dark FROM settings WHERE id=1",
   );
   const rides = await loadRides(db);
+  const payments = await db.getAllAsync<Payment>(`
+    SELECT id, CAST(person_id AS INTEGER) AS personId, date, amount_cents AS amountCents
+    FROM payments ORDER BY date DESC, id DESC
+  `);
   return {
     people,
     routes,
     rides,
+    payments,
     settings: {
       consumption: settings?.consumption ?? 12,
       gasPrice: settings?.gasPrice ?? 6.1,
@@ -168,11 +221,11 @@ async function loadRides(db: SQLite.SQLiteDatabase): Promise<Ride[]> {
     fuelCostCents: number;
     fareCents: number;
     pricing: string;
-    personId: string;
+    personId: string | null;
   }>(`
     SELECT r.id, r.date, r.route, r.distance AS km, r.fuel_cost_cents AS fuelCostCents,
       r.fare_cents AS fareCents, r.pricing, p.person_id AS personId
-    FROM rides r JOIN ride_passengers p ON p.ride_id = r.id
+    FROM rides r LEFT JOIN ride_passengers p ON p.ride_id = r.id
     ORDER BY r.date DESC, r.id DESC, p.person_id
   `);
   const rides = new Map<number, Ride>();
@@ -186,7 +239,7 @@ async function loadRides(db: SQLite.SQLiteDatabase): Promise<Ride[]> {
       };
       rides.set(row.id, ride);
     }
-    ride.passengers.push(Number(personId));
+    if (personId !== null) ride.passengers.push(Number(personId));
   }
   return [...rides.values()];
 }
@@ -212,6 +265,7 @@ export async function saveRide(
   const db = await database();
   let id = existingId ?? 0;
   await db.withExclusiveTransactionAsync(async (tx) => {
+    let previousPassengers: { person_id: string }[] = [];
     const fields = [
       ride.route,
       ride.km,
@@ -231,16 +285,24 @@ export async function saveRide(
         [...fields, id],
       );
       if (!result.changes) throw new Error("Carona não encontrada");
+      previousPassengers = await tx.getAllAsync<{ person_id: string }>(
+        "SELECT person_id FROM ride_passengers WHERE ride_id=?",
+        id,
+      );
       await tx.runAsync("DELETE FROM ride_passengers WHERE ride_id=?", id);
     }
     for (const personId of ride.passengers) {
       const result = await tx.runAsync(
-        "INSERT INTO ride_passengers(ride_id, person_id) SELECT ?, id FROM people WHERE id=?",
+        "INSERT INTO ride_passengers(ride_id, person_id) SELECT ?, id FROM people WHERE id=? AND (archived=0 OR ?)",
         id,
         String(personId),
+        previousPassengers.some((p) => p.person_id === String(personId))
+          ? 1
+          : 0,
       );
-      if (!result.changes) throw new Error("Passageiro não encontrado");
+      if (!result.changes) throw new Error("Passageiro indisponível");
     }
+    if (existingId !== undefined) await checkRideBalances(tx);
   });
   return { ...ride, id };
 }
@@ -250,6 +312,7 @@ export async function deleteRide(id: number) {
   await db.withExclusiveTransactionAsync(async (tx) => {
     await tx.runAsync("DELETE FROM ride_passengers WHERE ride_id=?", id);
     await tx.runAsync("DELETE FROM rides WHERE id=?", id);
+    await checkRideBalances(tx);
   });
 }
 export async function savePerson(p: Person) {
@@ -262,15 +325,62 @@ export async function savePerson(p: Person) {
     p.name.trim(),
   );
 }
-export async function deletePerson(id: number) {
+export async function archivePerson(id: number) {
   const db = await database();
   const result = await db.runAsync(
-    "DELETE FROM people WHERE id=? AND NOT EXISTS (SELECT 1 FROM ride_passengers WHERE person_id=?)",
-    String(id),
+    "UPDATE people SET archived=1 WHERE id=? AND id IN (SELECT id FROM person_balances WHERE balance=0)",
     String(id),
   );
-  if (!result.changes) throw new Error("Pessoa vinculada a uma carona");
+  if (!result.changes)
+    throw new Error("Só é possível arquivar pessoas sem dívidas.");
 }
+
+export async function savePayment(
+  personId: number,
+  amountCents: number,
+  existing?: Payment,
+): Promise<Payment> {
+  if (
+    !Number.isSafeInteger(personId) ||
+    !Number.isSafeInteger(amountCents) ||
+    amountCents <= 0
+  )
+    throw new Error("Informe um valor válido maior que zero.");
+  const db = await database();
+  const date = existing?.date ?? Date.now();
+  const result = existing
+    ? await db.runAsync(
+        `UPDATE payments SET amount_cents=? WHERE id=? AND person_id=?
+        AND ? <= amount_cents + (SELECT balance FROM person_balances WHERE id=payments.person_id)`,
+        amountCents,
+        existing.id,
+        String(personId),
+        amountCents,
+      )
+    : await db.runAsync(
+        `INSERT INTO payments(person_id, date, amount_cents)
+        SELECT id, ?, ? FROM person_balances WHERE id=? AND balance >= ?`,
+        date,
+        amountCents,
+        String(personId),
+        amountCents,
+      );
+  if (!result.changes)
+    throw new Error("Pagamento indisponível ou superior ao saldo devedor.");
+  return {
+    id: existing?.id ?? result.lastInsertRowId,
+    personId,
+    date,
+    amountCents,
+  };
+}
+
+export async function deletePayment(id: number) {
+  const db = await database();
+  const result = await db.runAsync("DELETE FROM payments WHERE id=?", id);
+  if (!result.changes) throw new Error("Pagamento não encontrado.");
+}
+
 export async function saveRoute(r: Route) {
   if (!r.name.trim() || !Number.isFinite(r.km) || r.km <= 0 || r.km > 40)
     throw Error("Rota inválida");

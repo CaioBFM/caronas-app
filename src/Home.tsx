@@ -10,8 +10,14 @@ export function Home({
   balances,
   onNew,
   onPeople,
+  received,
+  onPayment,
+  onStatistics,
 }: {
   count: number;
+  received: number;
+  onPayment: () => void;
+  onStatistics: () => void;
   people: Person[];
   balances: ReadonlyMap<number, number>;
   onNew: () => void;
@@ -42,7 +48,8 @@ export function Home({
           {money(total)}
         </T>
         <T size={12} color="white">
-          R$ 0,00 recebido · {count} {count === 1 ? "carona" : "caronas"}
+          {money(received)} recebido · {count}{" "}
+          {count === 1 ? "carona" : "caronas"}
         </T>
       </Box>
       <Button
@@ -66,6 +73,20 @@ export function Home({
         </View>
         <Icon name="arrow" color="white" />
       </Button>
+      <View style={s.wrap}>
+        <Button
+          onPress={onPayment}
+          style={{ backgroundColor: c.soft, flexGrow: 1 }}
+        >
+          <T bold>Registrar pagamento</T>
+        </Button>
+        <Button
+          onPress={onStatistics}
+          style={{ backgroundColor: c.secondary, flexGrow: 1 }}
+        >
+          <T bold>Estatísticas</T>
+        </Button>
+      </View>
       <View style={{ gap: 8 }}>
         <View style={s.between}>
           <T title size={17}>
@@ -93,17 +114,6 @@ export function Home({
         ) : (
           <Empty title="Tudo em dia" detail="Nenhum valor pendente por aqui." />
         )}
-      </View>
-      <View style={s.row}>
-        <Badge name="check" size={22} />
-        <View>
-          <T bold size={11}>
-            Contas atualizadas
-          </T>
-          <T size={10} color={c.muted}>
-            Nenhum pagamento registrado.
-          </T>
-        </View>
       </View>
     </>
   );
