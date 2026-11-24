@@ -71,6 +71,9 @@ for (const legacy of [false, true]) {
         savePayment,
         deletePayment,
         savePreferences,
+        exportBackup,
+        restoreBackup,
+        saveRoute,
       } = await import(
         legacy ? "../src/database.ts?legacy" : "../src/database.ts"
       );
@@ -81,6 +84,13 @@ for (const legacy of [false, true]) {
       );
       assert.equal(initial.routes[0].name, "Rota teste");
       assert.equal(initial.settings.dark, true);
+      await assert.rejects(saveRoute({ name: "Outra rota", km: NaN }));
+      await saveRoute({ name: "Rota nova", km: 12 });
+      await assert.rejects(saveRoute({ name: "rota nova", km: 22 }));
+      assert.equal(
+        (await loadData()).routes.find((r) => r.name === "Rota nova").km,
+        12,
+      );
       if (legacy) {
         assert.deepEqual(
           initial.rides.map(({ id, fareCents, passengers }) => ({
@@ -155,6 +165,59 @@ for (const legacy of [false, true]) {
         (await loadData()).payments.map((payment) => ({ ...payment })),
         [final, corrected],
       );
+      const backup = await exportBackup();
+      const original = JSON.parse(backup);
+      assert.equal(original.version, 1);
+      assert.equal(original.data.people[0].archived, true);
+      assert.deepEqual(original.data.payments, [final, corrected]);
+
+      const altered = structuredClone(original);
+      altered.data.people[0].name = "Pessoa restaurada";
+      altered.data.routes = [];
+      altered.data.settings.dark = true;
+      const changedBackup = JSON.stringify(altered);
+      await assert.rejects(
+        restoreBackup(JSON.stringify({ ...original, version: 99 })),
+        /incompatível/,
+      );
+      const invalid = structuredClone(original);
+      invalid.data.payments[0].amountCents = 301;
+      await assert.rejects(restoreBackup(JSON.stringify(invalid)), /inválido/);
+      const duplicate = structuredClone(original);
+      duplicate.data.rides.push(duplicate.data.rides[0]);
+      await assert.rejects(
+        restoreBackup(JSON.stringify(duplicate)),
+        /inválido/,
+      );
+      const missingPerson = structuredClone(original);
+      missingPerson.data.rides[0].passengers.push(99);
+      await assert.rejects(
+        restoreBackup(JSON.stringify(missingPerson)),
+        /inválido/,
+      );
+      assert.equal(await exportBackup(), backup);
+      db.exec(`
+        CREATE TRIGGER fail_restore BEFORE INSERT ON settings
+        BEGIN SELECT RAISE(ABORT, 'falha simulada'); END;
+      `);
+      await assert.rejects(restoreBackup(changedBackup), /falha simulada/);
+      assert.equal(await exportBackup(), backup);
+      db.exec("DROP TRIGGER fail_restore");
+
+      const restored = await restoreBackup(changedBackup);
+      assert.equal(
+        restored.people.find((p) => p.id === 1).name,
+        "Pessoa restaurada",
+      );
+      assert.deepEqual((await loadData()).routes, []);
+      assert.equal(restored.settings.dark, true);
+      assert.deepEqual(restored.rides, [ride]);
+      assert.deepEqual(JSON.parse(await exportBackup()).data.payments, [
+        final,
+        corrected,
+      ]);
+      await restoreBackup(backup);
+      assert.equal(await exportBackup(), backup);
       await assert.rejects(saveRide(draft), /Passageiro indisponível/);
       const afterRestart = new DatabaseSync(file, { readOnly: true });
       try {

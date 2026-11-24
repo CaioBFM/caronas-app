@@ -30,3 +30,11 @@ export type Payment = {
   date: number;
   amountCents: number;
 };
+
+export type AppData = {
+  people: Person[];
+  routes: Route[];
+  rides: Ride[];
+  payments: Payment[];
+  settings: Pricing & { dark: boolean };
+};

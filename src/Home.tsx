@@ -29,7 +29,12 @@ export function Home({
   return (
     <>
       <Header caption="Olá!" title="Caronas">
-        <Badge name="people" size={42} background={c.terra} color="white" />
+        <Badge
+          name="people"
+          size={42}
+          background={c.terra}
+          color={c.onAccent}
+        />
       </Header>
       <Box
         style={{
@@ -41,13 +46,18 @@ export function Home({
         }}
       >
         <View style={s.between}>
-          <T color="white">A receber</T>
-          <Badge name="wallet" size={31} background="#ffffff22" color="white" />
+          <T color={c.onAccent}>A receber</T>
+          <Badge
+            name="wallet"
+            size={31}
+            background="#ffffff22"
+            color={c.onAccent}
+          />
         </View>
-        <T title size={36} color="white">
+        <T title size={36} color={c.onAccent}>
           {money(total)}
         </T>
-        <T size={12} color="white">
+        <T size={12} color={c.onAccent}>
           {money(received)} recebido · {count}{" "}
           {count === 1 ? "carona" : "caronas"}
         </T>
@@ -62,16 +72,16 @@ export function Home({
           borderRadius: 17,
         }}
       >
-        <Badge name="plus" background="#ffffff33" color="white" />
+        <Badge name="plus" background="#ffffff33" color={c.onAccent} />
         <View style={s.grow}>
-          <T bold size={15} color="white">
+          <T bold size={15} color={c.onAccent}>
             Nova carona
           </T>
-          <T size={11} color="white">
+          <T size={11} color={c.onAccent}>
             Registre em poucos segundos
           </T>
         </View>
-        <Icon name="arrow" color="white" />
+        <Icon name="arrow" color={c.onAccent} />
       </Button>
       <View style={s.wrap}>
         <Button

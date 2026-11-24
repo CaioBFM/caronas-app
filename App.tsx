@@ -6,6 +6,8 @@ import {
   ScrollView,
   View,
 } from "react-native";
+import * as SplashScreen from "expo-splash-screen";
+import { Backup } from "./src/Backup";
 import { StatusBar } from "expo-status-bar";
 import { useFonts } from "expo-font";
 import { DMSans_400Regular } from "@expo-google-fonts/dm-sans/400Regular";
@@ -24,6 +26,7 @@ import { Button, T, Theme, light, night, s } from "./src/ui";
 import {
   defaultRoutes,
   type Tab,
+  type AppData,
   type Person,
   type Payment,
   type Ride,
@@ -31,6 +34,8 @@ import {
 } from "./src/model";
 import {
   loadData,
+  exportBackup,
+  restoreBackup,
   savePerson,
   archivePerson,
   savePayment,
@@ -43,6 +48,8 @@ import {
 } from "./src/database";
 
 import { getBalances } from "./src/finance";
+
+void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 const tabs: { name: Tab; icon: IconName }[] = [
   { name: "Início", icon: "home" },
@@ -70,15 +77,71 @@ export default function App() {
     [values, change] = useState([12, 6.1, 1, 3]);
   const [ready, setReady] = useState(false),
     [dbError, setDbError] = useState("");
+  const [backup, showBackup] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadAttempt, retryLoad] = useState(0);
+  const backupBusy = useRef(false);
+  const writes = useRef<Promise<unknown>>(Promise.resolve());
+  function enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const next = writes.current.then(operation);
+    writes.current = next.catch(() => {});
+    return next;
+  }
+
+  function applyData(data: AppData) {
+    setPeople(data.people);
+    setRides(data.rides);
+    setPayments(data.payments);
+    setRoutes(data.routes);
+    change([
+      data.settings.consumption,
+      data.settings.gasPrice,
+      data.settings.minFare,
+      data.settings.maxFare,
+    ]);
+    setDark(data.settings.dark);
+  }
+
   useEffect(() => {
     let active = true;
     loadData()
       .then((data) => {
         if (!active) return;
-        setPeople(data.people);
-        setRides(data.rides);
-        setPayments(data.payments);
-        setRoutes(data.routes);
+        applyData(data);
+        setLoadFailed(false);
+        setDbError("");
+        setReady(true);
+      })
+      .catch(() => {
+        if (active) {
+          setLoadFailed(true);
+          setReady(true);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [loadAttempt]);
+  useEffect(() => {
+    if ((loaded || error) && ready)
+      void SplashScreen.hideAsync().catch(() => {});
+  }, [loaded, error, ready]);
+
+  async function persistPreferences(nextValues = values, nextDark = dark) {
+    try {
+      await enqueue(() =>
+        savePreferences({
+          consumption: nextValues[0],
+          gasPrice: nextValues[1],
+          minFare: nextValues[2],
+          maxFare: nextValues[3],
+          dark: nextDark,
+        }),
+      );
+      setDbError("");
+    } catch {
+      const data = await enqueue(loadData).catch(() => undefined);
+      if (data) {
         change([
           data.settings.consumption,
           data.settings.gasPrice,
@@ -86,28 +149,7 @@ export default function App() {
           data.settings.maxFare,
         ]);
         setDark(data.settings.dark);
-        setReady(true);
-      })
-      .catch(() => {
-        if (active) {
-          setDbError("Não foi possível carregar os dados locais.");
-          setReady(true);
-        }
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-  async function persistPreferences(nextValues = values, nextDark = dark) {
-    try {
-      await savePreferences({
-        consumption: nextValues[0],
-        gasPrice: nextValues[1],
-        minFare: nextValues[2],
-        maxFare: nextValues[3],
-        dark: nextDark,
-      });
-    } catch {
+      }
       setDbError("Não foi possível salvar as configurações.");
     }
   }
@@ -120,7 +162,7 @@ export default function App() {
   async function submitPayment(id: number, cents: number, existing?: Payment) {
     savingPayment.current = true;
     try {
-      const payment = await savePayment(id, cents, existing);
+      const payment = await enqueue(() => savePayment(id, cents, existing));
       setPayments((items) =>
         existing
           ? items.map((item) => (item.id === payment.id ? payment : item))
@@ -135,7 +177,7 @@ export default function App() {
 
   async function removePayment(id: number) {
     try {
-      await deletePayment(id);
+      await enqueue(() => deletePayment(id));
       setPayments((items) => items.filter((payment) => payment.id !== id));
       setDbError("");
     } catch {
@@ -146,7 +188,7 @@ export default function App() {
   async function submitRide(draft: RideDraft) {
     savingRide.current = true;
     try {
-      const ride = await saveRide(draft, editing?.id);
+      const ride = await enqueue(() => saveRide(draft, editing?.id));
       setRides((items) =>
         editing
           ? items.map((item) => (item.id === ride.id ? ride : item))
@@ -165,7 +207,7 @@ export default function App() {
 
   async function removeRide(id: number) {
     try {
-      await deleteRide(id);
+      await enqueue(() => deleteRide(id));
       setRides((items) => items.filter((ride) => ride.id !== id));
       setDbError("");
     } catch (failure) {
@@ -178,6 +220,10 @@ export default function App() {
   }
   useEffect(() => {
     const listener = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (backup) {
+        if (!backupBusy.current) showBackup(false);
+        return true;
+      }
       if (paymentTarget) {
         if (!savingPayment.current) setPaymentTarget(undefined);
         return true;
@@ -201,14 +247,21 @@ export default function App() {
       return false;
     });
     return () => listener.remove();
-  }, [form, tab, paymentTarget, statistics, personId]);
+  }, [form, tab, paymentTarget, statistics, personId, backup]);
   if ((!loaded && !error) || !ready) return null;
   return (
     <SafeAreaProvider>
       <Theme.Provider value={c}>
         <SafeAreaView style={{ flex: 1, backgroundColor: c.bg }}>
           <StatusBar style={dark ? "light" : "dark"} />
-          {!!dbError && <T>{dbError}</T>}
+          {!!dbError && (
+            <View
+              accessibilityLiveRegion="polite"
+              style={{ paddingHorizontal: 20, paddingTop: 10 }}
+            >
+              <T color={c.terra}>{dbError}</T>
+            </View>
+          )}
           <KeyboardAvoidingView
             behavior={Platform.OS === "ios" ? "padding" : undefined}
             style={{ flex: 1 }}
@@ -225,13 +278,15 @@ export default function App() {
               <ScrollView
                 keyboardDismissMode="on-drag"
                 key={
-                  paymentTarget
-                    ? "payment"
-                    : statistics
-                      ? "statistics"
-                      : form
-                        ? "new"
-                        : (personId ?? tab)
+                  backup
+                    ? "backup"
+                    : paymentTarget
+                      ? "payment"
+                      : statistics
+                        ? "statistics"
+                        : form
+                          ? "new"
+                          : (personId ?? tab)
                 }
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={{
@@ -241,7 +296,33 @@ export default function App() {
                   gap: 16,
                 }}
               >
-                {paymentTarget ? (
+                {loadFailed ? (
+                  <View style={{ padding: 20, gap: 10 }}>
+                    <T>Não foi possível carregar os dados locais.</T>
+                    <Button
+                      onPress={() => {
+                        setReady(false);
+                        retryLoad((attempt) => attempt + 1);
+                      }}
+                    >
+                      <T bold>Tentar novamente</T>
+                    </Button>
+                  </View>
+                ) : backup ? (
+                  <Backup
+                    back={() => showBackup(false)}
+                    onBusy={(busy) => {
+                      backupBusy.current = busy;
+                    }}
+                    exportData={() => enqueue(exportBackup)}
+                    restore={async (content) => {
+                      applyData(await enqueue(() => restoreBackup(content)));
+                      edit(null);
+                      selectPerson(undefined);
+                      setDbError("");
+                    }}
+                  />
+                ) : paymentTarget ? (
                   <PaymentForm
                     target={paymentTarget}
                     people={people}
@@ -316,21 +397,17 @@ export default function App() {
                     rides={rides}
                     balances={balances}
                     save={async (p) => {
-                      try {
-                        await savePerson(p);
-                        setPeople((items) =>
-                          items.some((i) => i.id === p.id)
-                            ? items.map((i) => (i.id === p.id ? p : i))
-                            : [...items, p],
-                        );
-                        setDbError("");
-                      } catch {
-                        setDbError("Não foi possível salvar a pessoa.");
-                      }
+                      await enqueue(() => savePerson(p));
+                      setPeople((items) =>
+                        items.some((i) => i.id === p.id)
+                          ? items.map((i) => (i.id === p.id ? p : i))
+                          : [...items, p],
+                      );
+                      setDbError("");
                     }}
                     archive={async (id) => {
                       try {
-                        await archivePerson(id);
+                        await enqueue(() => archivePerson(id));
                         setPeople((items) =>
                           items.map((p) =>
                             p.id === id ? { ...p, archived: true } : p,
@@ -353,21 +430,24 @@ export default function App() {
                       void persistPreferences(values, next);
                     }}
                     routes={routes}
-                    setRoutes={(next) => {
-                      const removed = routes.filter(
-                        (r) => !next.some((n) => n.name === r.name),
-                      );
-                      setRoutes(next);
-                      void (async () => {
-                        try {
-                          for (const r of removed) await deleteRoute(r.name);
-                          for (const r of next) await saveRoute(r);
-                          setDbError("");
-                        } catch {
-                          setDbError("Não foi possível salvar as rotas.");
-                        }
-                      })();
+                    addRoute={async (route) => {
+                      await enqueue(() => saveRoute(route));
+                      setRoutes((items) => [...items, route]);
                     }}
+                    removeRoute={async (name) => {
+                      await enqueue(() => deleteRoute(name));
+                      setRoutes((items) =>
+                        items.filter((r) => r.name !== name),
+                      );
+                    }}
+                    onBackup={
+                      Platform.OS === "android"
+                        ? () => {
+                            setDbError("");
+                            showBackup(true);
+                          }
+                        : undefined
+                    }
                     values={values}
                     change={(next) => {
                       change(next);
@@ -376,45 +456,49 @@ export default function App() {
                   />
                 )}
               </ScrollView>
-              {!form && !paymentTarget && !statistics && (
-                <View
-                  style={[
-                    s.row,
-                    {
-                      backgroundColor: c.surface,
-                      borderTopWidth: 1,
-                      borderColor: c.line,
-                      minHeight: 76,
-                      gap: 0,
-                    },
-                  ]}
-                >
-                  {tabs.map((t) => (
-                    <Button
-                      key={t.name}
-                      selected={tab === t.name}
-                      style={{ flex: 1, gap: 3 }}
-                      onPress={() => {
-                        selectPerson(undefined);
-                        setTab(t.name);
-                      }}
-                    >
-                      <Icon
-                        name={t.icon}
-                        color={tab === t.name ? c.sage : c.muted}
-                        size={21}
-                      />
-                      <T
-                        bold
-                        size={10}
-                        color={tab === t.name ? c.sage : c.muted}
+              {!form &&
+                !paymentTarget &&
+                !statistics &&
+                !backup &&
+                !loadFailed && (
+                  <View
+                    style={[
+                      s.row,
+                      {
+                        backgroundColor: c.surface,
+                        borderTopWidth: 1,
+                        borderColor: c.line,
+                        minHeight: 76,
+                        gap: 0,
+                      },
+                    ]}
+                  >
+                    {tabs.map((t) => (
+                      <Button
+                        key={t.name}
+                        selected={tab === t.name}
+                        style={{ flex: 1, gap: 3 }}
+                        onPress={() => {
+                          selectPerson(undefined);
+                          setTab(t.name);
+                        }}
                       >
-                        {t.name}
-                      </T>
-                    </Button>
-                  ))}
-                </View>
-              )}
+                        <Icon
+                          name={t.icon}
+                          color={tab === t.name ? c.sage : c.muted}
+                          size={21}
+                        />
+                        <T
+                          bold
+                          size={10}
+                          color={tab === t.name ? c.sage : c.muted}
+                        >
+                          {t.name}
+                        </T>
+                      </Button>
+                    ))}
+                  </View>
+                )}
             </View>
           </KeyboardAvoidingView>
         </SafeAreaView>

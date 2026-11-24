@@ -99,15 +99,44 @@ export function Statistics({
         return (
           values && (
             <Box key={p.id}>
-              <T bold>{p.name}</T>
-              <T>
-                {values.count} {values.count === 1 ? "carona" : "caronas"} ·{" "}
-                {money(values.charged)} cobrado
+              <T title size={19}>
+                {p.name}
               </T>
-              <T>
-                {money(values.received)} recebido · {money(values.pending)}{" "}
-                pendente
+              <T size={14} color={c.muted}>
+                {values.count} {values.count === 1 ? "carona" : "caronas"}
               </T>
+              <View
+                style={{
+                  borderTopWidth: 1,
+                  borderColor: c.line,
+                  paddingTop: 10,
+                  gap: 8,
+                }}
+              >
+                {(
+                  [
+                    ["Total devido", values.charged],
+                    ["Valor pago", values.received],
+                    ["Saldo pendente", values.pending],
+                  ] as const
+                ).map(([label, amount], index) => (
+                  <View
+                    key={label}
+                    style={{ ...s.wrap, justifyContent: "space-between" }}
+                  >
+                    <T size={14} bold={index === 2}>
+                      {label}
+                    </T>
+                    <T
+                      size={16}
+                      bold
+                      color={index === 2 && amount > 0 ? c.terra : c.text}
+                    >
+                      {money(amount)}
+                    </T>
+                  </View>
+                ))}
+              </View>
             </Box>
           )
         );

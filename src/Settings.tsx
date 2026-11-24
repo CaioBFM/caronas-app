@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Switch, TextInput, View } from "react-native";
 import { Header, Badge, Box, Button, T, s, useColors } from "./ui";
 import type { Route } from "./model";
@@ -6,14 +6,18 @@ export function Settings({
   dark,
   toggle,
   routes,
-  setRoutes,
+  addRoute,
+  removeRoute,
+  onBackup,
   values,
   change,
 }: {
   dark: boolean;
   toggle: () => void;
   routes: Route[];
-  setRoutes: (r: Route[]) => void;
+  addRoute: (route: Route) => Promise<void>;
+  removeRoute: (name: string) => Promise<void>;
+  onBackup?: () => void;
   values: number[];
   change: (v: number[]) => void;
 }) {
@@ -21,11 +25,44 @@ export function Settings({
     [adding, add] = useState(false),
     [name, setName] = useState(""),
     [km, setKm] = useState("");
-  const [drafts, setDrafts] = useState<Record<number,string>>({});
-  function numericDraft(index:number, text:string) { if (/^\d*[.,]?\d*$/.test(text)) {setDrafts({...drafts,[index]:text});const parsed=Number(text.replace(',','.'));if(Number.isFinite(parsed)&&parsed>0){const next=[...values];next[index]=parsed;if(next[2]<=next[3])change(next)}} }
+  const routing = useRef(false);
+  const [savingRoute, setSavingRoute] = useState(false);
+  const [routeError, setRouteError] = useState("");
+
+  async function changeRoute(operation: () => Promise<void>, failure: string) {
+    if (routing.current) return;
+    routing.current = true;
+    setSavingRoute(true);
+    setRouteError("");
+    try {
+      await operation();
+    } catch {
+      setRouteError(failure);
+    } finally {
+      routing.current = false;
+      setSavingRoute(false);
+    }
+  }
+
+  const [drafts, setDrafts] = useState<Record<number, string>>({});
+  function finishNumber(index: number, text: string) {
+    const value = /^\d+(?:[.,]\d+)?$/.test(text)
+      ? Number(text.replace(",", "."))
+      : NaN;
+    setDrafts((previous) => {
+      const next = { ...previous };
+      delete next[index];
+      return next;
+    });
+    if (!Number.isFinite(value) || value <= 0 || value === values[index])
+      return;
+    const next = [...values];
+    next[index] = value;
+    if (next[2] <= next[3]) change(next);
+  }
   const valid =
     name.trim() &&
-    Number.isInteger(+km) &&
+    /^\d+$/.test(km) &&
     +km >= 1 &&
     +km <= 40 &&
     !["Outro destino", ...routes.map((r) => r.name)].some(
@@ -41,13 +78,49 @@ export function Settings({
   }
   function controls(i: number, unit: string, delta: number) {
     return (
-      <View style={{flexDirection:"row",alignItems:"center",justifyContent:"space-between",width:"100%",gap:4}}>
-        <Button style={{width:44,height:44,padding:0,flexShrink:0}} label={"Diminuir " + labels[i]} onPress={() => step(i, -delta)}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          width: "100%",
+          gap: 4,
+        }}
+      >
+        <Button
+          style={{ width: 44, height: 44, padding: 0, flexShrink: 0 }}
+          label={"Diminuir " + labels[i]}
+          onPress={() => step(i, -delta)}
+        >
           <Badge name="minus" size={24} />
         </Button>
-        <TextInput accessibilityLabel={labels[i]} keyboardType="decimal-pad" value={drafts[i] ?? String(values[i]).replace('.',',')} onChangeText={text=>numericDraft(i,text)} onEndEditing={()=>setDrafts({...drafts,[i]:String(values[i]).replace('.',',')})} style={{flex:1,minWidth:0,maxWidth:120,textAlign:'center',borderWidth:1,borderColor:c.line,borderRadius:8,padding:8,color:c.text,fontSize:15}} />
+        <TextInput
+          accessibilityLabel={labels[i]}
+          keyboardType="decimal-pad"
+          value={drafts[i] ?? String(values[i]).replace(".", ",")}
+          onChangeText={(text) =>
+            setDrafts((previous) => ({ ...previous, [i]: text }))
+          }
+          onEndEditing={({ nativeEvent }) => finishNumber(i, nativeEvent.text)}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            maxWidth: 120,
+            textAlign: "center",
+            borderWidth: 1,
+            borderColor: c.line,
+            borderRadius: 8,
+            padding: 8,
+            color: c.text,
+            fontSize: 15,
+          }}
+        />
         <T size={13}>{unit}</T>
-        <Button style={{width:44,height:44,padding:0,flexShrink:0}} label={"Aumentar " + labels[i]} onPress={() => step(i, delta)}>
+        <Button
+          style={{ width: 44, height: 44, padding: 0, flexShrink: 0 }}
+          label={"Aumentar " + labels[i]}
+          onPress={() => step(i, delta)}
+        >
           <Badge name="plus" size={24} />
         </Button>
       </View>
@@ -62,16 +135,18 @@ export function Settings({
       </T>
       <Box>
         {labels.slice(0, 2).map((label, i) => (
-          <View key={label} style={{gap:5,paddingVertical:5}}>
-            <View style={{flexDirection:'row',alignItems:'center',gap:9}}>
+          <View key={label} style={{ gap: 5, paddingVertical: 5 }}>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 9 }}
+            >
               <Badge name={i ? "fuel" : "car"} />
-              <View style={{flex:1,minWidth:0}}>
-              <T bold size={11}>
-                {label}
-              </T>
-              <T size={10} color={c.muted}>
-                Usado nos cálculos
-              </T>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <T bold size={11}>
+                  {label}
+                </T>
+                <T size={10} color={c.muted}>
+                  Usado nos cálculos
+                </T>
               </View>
             </View>
             {controls(i, i ? "R$/L" : "km/L", i ? 0.1 : 1)}
@@ -83,7 +158,7 @@ export function Settings({
       </T>
       <Box style={{ ...s.wrap, justifyContent: "space-around" }}>
         {[2, 3].map((i) => (
-          <View key={i} style={{width:'100%',gap:5}}>
+          <View key={i} style={{ width: "100%", gap: 5 }}>
             <T size={10} color={c.muted}>
               {labels[i]}
             </T>
@@ -95,7 +170,13 @@ export function Settings({
         <T bold size={11} color={c.muted}>
           ROTAS SALVAS
         </T>
-        <Button onPress={() => add(!adding)}>
+        <Button
+          disabled={savingRoute}
+          onPress={() => {
+            add(!adding);
+            setRouteError("");
+          }}
+        >
           <T bold size={12} color={c.sage}>
             {adding ? "Cancelar" : "+ Adicionar"}
           </T>
@@ -113,7 +194,13 @@ export function Settings({
             </View>
             <Button
               label={"Excluir " + r.name}
-              onPress={() => setRoutes(routes.filter((item) => item !== r))}
+              disabled={savingRoute}
+              onPress={() =>
+                void changeRoute(
+                  () => removeRoute(r.name),
+                  "Não foi possível excluir a rota.",
+                )
+              }
             >
               <Badge name="trash" size={26} />
             </Button>
@@ -128,7 +215,13 @@ export function Settings({
               placeholderTextColor={c.muted}
               value={name}
               onChangeText={setName}
-              style={{ color: c.text }}
+              editable={!savingRoute}
+              style={{
+                color: c.text,
+                minHeight: 44,
+                borderBottomWidth: 1,
+                borderColor: c.line,
+              }}
             />
             <TextInput
               accessibilityLabel="Distância da rota"
@@ -137,16 +230,24 @@ export function Settings({
               keyboardType="number-pad"
               value={km}
               onChangeText={setKm}
-              style={{ color: c.text }}
+              editable={!savingRoute}
+              style={{
+                color: c.text,
+                minHeight: 44,
+                borderBottomWidth: 1,
+                borderColor: c.line,
+              }}
             />
             <Button
-              disabled={!valid}
-              onPress={() => {
-                setRoutes([...routes, { name: name.trim(), km: +km }]);
-                add(false);
-                setName("");
-                setKm("");
-              }}
+              disabled={!valid || savingRoute}
+              onPress={() =>
+                void changeRoute(async () => {
+                  await addRoute({ name: name.trim(), km: +km });
+                  add(false);
+                  setName("");
+                  setKm("");
+                }, "Não foi possível salvar a rota. Confira se o nome já está em uso.")
+              }
             >
               <T bold color={c.sage}>
                 Salvar rota
@@ -155,6 +256,7 @@ export function Settings({
           </>
         )}
       </Box>
+      {!!routeError && <T color={c.terra}>{routeError}</T>}
       <T bold size={11} color={c.muted}>
         APARÊNCIA
       </T>
@@ -173,6 +275,17 @@ export function Settings({
           trackColor={{ true: c.sage }}
         />
       </Box>
+      {onBackup && (
+        <Box>
+          <Button
+            disabled={savingRoute}
+            onPress={onBackup}
+            style={{ backgroundColor: c.soft }}
+          >
+            <T bold>Backup e restauração</T>
+          </Button>
+        </Box>
+      )}
       <View style={s.center}>
         <T size={10} color={c.muted}>
           Caronas · versão 1.0

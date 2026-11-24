@@ -1,6 +1,6 @@
 ## Projeto
 
-Aplicativo Android pessoal para organizar caronas e gastos com gasolina, desenvolvido com Expo SDK 58, React Native e TypeScript. As telas ficam em `src/`. A navegação e os dados da sessão são controlados em `App.tsx`.
+Aplicativo Android pessoal para organizar caronas e gastos com gasolina, desenvolvido com Expo SDK 58, React Native e TypeScript. As telas ficam em `src/`. A navegação e o estado em memória são controlados em `App.tsx`. A persistência e as migrações SQLite ficam em `src/database.ts`, e as regras financeiras em `src/finance.ts`.
 
 ## Diretrizes de implementação
 
@@ -23,7 +23,9 @@ Antes de alterar código que use Expo, EAS ou React Native:
 ## Privacidade e arquivos locais
 
 - Nunca exponha ou registre credenciais, tokens, chaves privadas, informações pessoais ou dados reais de uso.
-- Não adicione ao controle de versão bancos SQLite, cópias, dumps ou arquivos auxiliares de banco. Use somente dados fictícios em exemplos.
+- Não adicione ao controle de versão bancos SQLite, backups JSON, dumps ou arquivos auxiliares de banco. Use somente dados fictícios em exemplos.
+- Preserve a compatibilidade de restauração com o formato de backup publicado. Valide referências e saldos e mantenha a substituição dos dados em uma única transação.
+- Preserve o identificador Android `br.com.caronasapp` em futuras atualizações.
 - Mantenha segredos em arquivos locais ignorados pelo Git e não inclua valores secretos em configuração ou documentação.
 - Preserve arquivos de manifesto e lockfile necessários à instalação reproduzível. Não ignore arquivos de configuração necessários ao projeto.
 

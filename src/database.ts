@@ -1,13 +1,17 @@
 import * as SQLite from "expo-sqlite";
-import type { Person, Route, Ride, RideDraft, Pricing, Payment } from "./model";
+import {
+  defaultRoutes,
+  type AppData,
+  type Person,
+  type Route,
+  type Ride,
+  type RideDraft,
+  type Pricing,
+  type Payment,
+} from "./model.ts";
+import { decodeBackup, encodeBackup } from "./backupFormat.ts";
 
-export type Preferences = {
-  consumption: number;
-  gasPrice: number;
-  minFare: number;
-  maxFare: number;
-  dark: boolean;
-};
+export type Preferences = AppData["settings"];
 let dbPromise: Promise<SQLite.SQLiteDatabase> | undefined;
 async function database() {
   if (!dbPromise)
@@ -31,6 +35,7 @@ async function database() {
           await db.runAsync(
             "INSERT OR IGNORE INTO settings VALUES(1,12,6.1,1,3,0)",
           );
+          for (const route of defaultRoutes) await insertRoute(db, route);
         });
       await migrateRides(db);
       await repairLegacyRides(db);
@@ -155,7 +160,10 @@ async function checkRideBalances(tx: SQLite.SQLiteDatabase) {
 }
 
 export async function loadData() {
-  const db = await database();
+  return readData(await database());
+}
+
+async function readData(db: SQLite.SQLiteDatabase): Promise<AppData> {
   const rows = await db.getAllAsync<{
     id: string;
     name: string;
@@ -166,24 +174,9 @@ export async function loadData() {
     name: row.name,
     archived: !!row.archived,
   }));
-  let routes = await db.getAllAsync<Route>(
+  const routes = await db.getAllAsync<Route>(
     "SELECT name, km FROM routes ORDER BY name COLLATE NOCASE",
   );
-  if (!routes.length) {
-    for (const [name, km] of [
-      ["UFLA", 12],
-      ["Centro", 7],
-    ] as const)
-      await db.runAsync(
-        "INSERT OR IGNORE INTO routes(id,name,km) VALUES(?,?,?)",
-        name.toLowerCase(),
-        name,
-        km,
-      );
-    routes = await db.getAllAsync<Route>(
-      "SELECT name, km FROM routes ORDER BY name COLLATE NOCASE",
-    );
-  }
   const settings = await db.getFirstAsync<{
     consumption: number;
     gasPrice: number;
@@ -250,6 +243,9 @@ export async function saveRide(
 ): Promise<Ride> {
   if (
     !ride.route.trim() ||
+    !Number.isSafeInteger(ride.date) ||
+    ride.date < 0 ||
+    ride.date > 8.64e15 ||
     !Number.isFinite(ride.km) ||
     ride.km < 1 ||
     ride.km > 40 ||
@@ -382,14 +378,23 @@ export async function deletePayment(id: number) {
 }
 
 export async function saveRoute(r: Route) {
-  if (!r.name.trim() || !Number.isFinite(r.km) || r.km <= 0 || r.km > 40)
+  if (
+    !r.name.trim() ||
+    r.name.trim().toLowerCase() === "outro destino" ||
+    !Number.isFinite(r.km) ||
+    r.km <= 0 ||
+    r.km > 40
+  )
     throw Error("Rota inválida");
-  const db = await database();
+  await insertRoute(await database(), r);
+}
+async function insertRoute(db: SQLite.SQLiteDatabase, route: Route) {
+  const name = route.name.trim();
   await db.runAsync(
-    "INSERT INTO routes(id,name,km) VALUES(?,?,?) ON CONFLICT(name) DO UPDATE SET km=excluded.km",
-    r.name.toLowerCase(),
-    r.name.trim(),
-    r.km,
+    "INSERT INTO routes(id,name,km) VALUES(?,?,?)",
+    name.toLowerCase(),
+    name,
+    route.km,
   );
 }
 export async function deleteRoute(name: string) {
@@ -404,13 +409,74 @@ export async function savePreferences(p: Preferences) {
     p.minFare > p.maxFare
   )
     throw Error("Configuração inválida");
-  const db = await database();
+  await writePreferences(await database(), p);
+}
+
+async function writePreferences(db: SQLite.SQLiteDatabase, p: Preferences) {
   await db.runAsync(
-    "UPDATE settings SET consumption=?,gas_price=?,min_fare=?,max_fare=?,dark=? WHERE id=1",
+    "INSERT OR REPLACE INTO settings(id,consumption,gas_price,min_fare,max_fare,dark) VALUES(1,?,?,?,?,?)",
     p.consumption,
     p.gasPrice,
     p.minFare,
     p.maxFare,
     p.dark ? 1 : 0,
   );
+}
+
+export async function exportBackup() {
+  const db = await database();
+  let content = "";
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    content = encodeBackup(await readData(tx));
+  });
+  return content;
+}
+
+export async function restoreBackup(content: string): Promise<AppData> {
+  const data = decodeBackup(content);
+  const db = await database();
+  let restored = data;
+  await db.withExclusiveTransactionAsync(async (tx) => {
+    await tx.execAsync(
+      "DELETE FROM payments; DELETE FROM ride_passengers; DELETE FROM rides; DELETE FROM people; DELETE FROM routes;",
+    );
+    for (const p of data.people)
+      await tx.runAsync(
+        "INSERT INTO people(id,name,archived) VALUES(?,?,?)",
+        String(p.id),
+        p.name,
+        p.archived ? 1 : 0,
+      );
+    for (const ride of data.rides) {
+      await tx.runAsync(
+        "INSERT INTO rides(id,date,route,distance,fuel_cost_cents,fare_cents,pricing) VALUES(?,?,?,?,?,?,?)",
+        ride.id,
+        ride.date,
+        ride.route,
+        ride.km,
+        ride.fuelCostCents,
+        ride.fareCents,
+        JSON.stringify(ride.pricing),
+      );
+      for (const id of ride.passengers)
+        await tx.runAsync(
+          "INSERT INTO ride_passengers(ride_id,person_id) VALUES(?,?)",
+          ride.id,
+          String(id),
+        );
+    }
+    for (const payment of data.payments)
+      await tx.runAsync(
+        "INSERT INTO payments(id,person_id,date,amount_cents) VALUES(?,?,?,?)",
+        payment.id,
+        String(payment.personId),
+        payment.date,
+        payment.amountCents,
+      );
+    for (const route of data.routes) await insertRoute(tx, route);
+    await writePreferences(tx, data.settings);
+    await checkRideBalances(tx);
+    restored = await readData(tx);
+  });
+  return restored;
 }

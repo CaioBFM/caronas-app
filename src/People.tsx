@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Alert, TextInput, View } from "react-native";
 import { Badge, Box, Button, Empty, Header, T, s, useColors } from "./ui";
 import type { Payment, Person, Ride } from "./model";
@@ -20,7 +20,7 @@ export function People({
   people: Person[];
   rides: Ride[];
   balances: ReadonlyMap<number, number>;
-  save: (person: Person) => void;
+  save: (person: Person) => Promise<void>;
   archive: (id: number) => void;
   person?: Person;
   select: (id?: number) => void;
@@ -31,10 +31,23 @@ export function People({
 }) {
   const c = useColors(),
     [draft, setDraft] = useState<Person | null>(null);
-  function submit() {
-    if (draft?.name.trim()) {
-      save({ ...draft, name: draft.name.trim() });
+  const saving = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const [saveError, setSaveError] = useState("");
+
+  async function submit() {
+    if (saving.current || !draft?.name.trim()) return;
+    saving.current = true;
+    setBusy(true);
+    setSaveError("");
+    try {
+      await save({ ...draft, name: draft.name.trim() });
       setDraft(null);
+    } catch {
+      setSaveError("Não foi possível salvar a pessoa.");
+    } finally {
+      saving.current = false;
+      setBusy(false);
     }
   }
   if (person) {
@@ -132,33 +145,43 @@ export function People({
       <Header title="Pessoas" caption="Seus contatos">
         <Button
           label="Adicionar pessoa"
+          disabled={busy}
           onPress={() => setDraft({ id: Date.now(), name: "" })}
         >
-          <Badge name="plus" size={40} color="white" background={c.sage} />
+          <Badge name="plus" size={40} color={c.onAccent} background={c.sage} />
         </Button>
       </Header>
       {draft && (
         <Box style={s.row}>
           <TextInput
             autoFocus
+            editable={!busy}
             accessibilityLabel="Nome da pessoa"
             placeholder="Nome da pessoa"
             placeholderTextColor={c.muted}
             value={draft.name}
             onChangeText={(name) => setDraft({ ...draft, name })}
             onSubmitEditing={submit}
-            style={{ flex: 1, color: c.text }}
+            style={{ flex: 1, color: c.text, minHeight: 44 }}
           />
-          <Button onPress={submit} disabled={!draft.name.trim()}>
+          <Button onPress={submit} disabled={busy || !draft.name.trim()}>
             <T bold color={c.sage}>
               Salvar
             </T>
           </Button>
-          <Button label="Cancelar" onPress={() => setDraft(null)}>
+          <Button
+            label="Cancelar"
+            disabled={busy}
+            onPress={() => {
+              setDraft(null);
+              setSaveError("");
+            }}
+          >
             <Badge name="close" size={25} />
           </Button>
         </Box>
       )}
+      {!!saveError && <T color={c.terra}>{saveError}</T>}
       <T size={11} color={c.muted}>
         {people.length}{" "}
         {people.length === 1 ? "pessoa cadastrada" : "pessoas cadastradas"}
@@ -178,14 +201,14 @@ export function People({
                 style={[
                   s.center,
                   {
-                    backgroundColor: "#789c88",
+                    backgroundColor: c.sage,
                     width: 38,
                     height: 38,
                     borderRadius: 19,
                   },
                 ]}
               >
-                <T bold color="white">
+                <T bold color={c.onAccent}>
                   {p.name.charAt(0)}
                 </T>
               </View>
@@ -196,7 +219,11 @@ export function People({
                   carona(s){p.archived ? " · Arquivada" : ""}
                 </T>
               </View>
-              <Button label={"Editar " + p.name} onPress={() => setDraft(p)}>
+              <Button
+                label={"Editar " + p.name}
+                disabled={busy}
+                onPress={() => setDraft(p)}
+              >
                 <Badge name="edit" size={30} />
               </Button>
               <Button

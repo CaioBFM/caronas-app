@@ -13,11 +13,12 @@ export const light = {
   surface: "#fffdf8",
   secondary: "#eeeee4",
   text: "#26342c",
-  muted: "#788078",
+  muted: "#626d62",
   line: "#e3e2d8",
-  sage: "#627d69",
+  sage: "#506a57",
   soft: "#dfe9df",
-  terra: "#c37352",
+  terra: "#a8593b",
+  onAccent: "#ffffff",
 };
 export const night = {
   bg: "#171d19",
@@ -29,6 +30,7 @@ export const night = {
   sage: "#91ad97",
   soft: "#33443a",
   terra: "#d58b69",
+  onAccent: "#171d19",
 };
 export const Theme = createContext(light);
 export const useColors = () => useContext(Theme);
@@ -197,7 +199,7 @@ export function Empty({ title, detail }: { title: string; detail: string }) {
     >
       <Badge name="check" size={38} />
       <T bold>{title}</T>
-        <T size={13} color={c.muted}>
+      <T size={13} color={c.muted}>
         {detail}
       </T>
     </Box>

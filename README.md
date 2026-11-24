@@ -1,29 +1,35 @@
 # Caronas
 
-Aplicativo Android pessoal em Expo SDK 58 para organizar caronas, rotas e passageiros. Os registros e ajustes duram uma sessão. O simulador apresenta o layout dos gastos, com os cálculos financeiros previstos para uma etapa futura.
-
-## Requisitos
-
-- Ubuntu com Node.js LTS e npm.
-- Android com o aplicativo Expo Go instalado.
-- Computador e celular na mesma rede Wi-Fi.
+Aplicativo Android pessoal para registrar caronas, estimar gastos de gasolina e acompanhar os pagamentos dos passageiros. Os dados e as preferências ficam no SQLite local e são mantidos após reiniciar o aplicativo.
 
 ## Executar no Ubuntu
 
-Na raiz do projeto, instale as dependências pelo lockfile e inicie o Expo:
+Use Node.js 24 ou mais recente, npm e Expo Go compatível com o Expo SDK 58. No computador, execute:
 
 ```bash
 npm ci
-npx expo start
+npm start
 ```
 
-Quando o QR code aparecer, abra o Expo Go no Android e escaneie-o. Se a rede local impedir a conexão, inicie com `npx expo start --tunnel`.
+Abra o Expo Go no Android e escaneie o QR code. Se a rede local impedir a conexão, use `npx expo start --tunnel`.
+
+## Uso
+
+- **Início** permite registrar caronas e pagamentos e abrir as estatísticas.
+- **Histórico** reúne as caronas e permite corrigir ou excluir registros sem deixar pagamentos acima das cobranças.
+- **Pessoas** mostra saldos, histórico individual de pagamentos e arquivamento de pessoas em dia.
+- **Estatísticas** reúne custos, distâncias, cobranças e pagamentos por mês ou por todo o período. O saldo de cada mês considera a quitação das caronas mais antigas primeiro.
+- **Ajustes** reúne os parâmetros de cálculo, as rotas, o tema e o backup.
+
+Em **Ajustes → Backup e restauração**, exporte um arquivo JSON versionado para uma pasta escolhida no Android. Ele contém pessoas, caronas, pagamentos, rotas e configurações. Ao importar, confira o resumo e confirme a substituição dos dados do aparelho. Se houver erro na restauração, o SQLite reverte todas as alterações. Guarde o arquivo em local de confiança, pois ele contém dados pessoais em texto legível.
 
 ## Verificações
 
 ```bash
 npx tsc --noEmit
+npm test
 npx expo-doctor
+npm audit
 ```
 
-O projeto usa Expo Go e não requer diretórios nativos gerados para iniciar.
+O identificador Android é `br.com.caronasapp`. O ícone e a tela de inicialização personalizados fazem parte do aplicativo nativo. O Expo Go usa sua própria tela de abertura.

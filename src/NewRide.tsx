@@ -242,7 +242,7 @@ export function NewRide({
         style={{ backgroundColor: c.terra, minHeight: 52, borderRadius: 17 }}
         onPress={submit}
       >
-        <T bold color="white">
+        <T bold color={c.onAccent}>
           ✓ {initial ? "Salvar alterações" : "Registrar carona"}
         </T>
       </Button>

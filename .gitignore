@@ -25,7 +25,8 @@ web-build/
 expo-env.d.ts
 *.tsbuildinfo
 
-# local databases and their SQLite sidecar files
+# local backups, databases and their SQLite sidecar files
+caronas-backup-*.json
 *.db
 *.db-*
 *.sqlite
