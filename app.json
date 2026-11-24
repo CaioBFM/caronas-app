@@ -32,6 +32,12 @@
           "backgroundColor": "#506a57"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "58432274-61ab-4c4f-94ed-7711d917c064"
+      }
+    },
+    "owner": "caiofinocchio"
   }
 }
